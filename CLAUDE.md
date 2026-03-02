@@ -13,7 +13,7 @@ Adaptive Large Neighborhood Search (ALNS) solver for the Dial-a-Ride Problem (DA
 python main.py data/cordeau/pr01.txt --iterations 10000 --seed 42
 
 # Run solver on a Li & Lim instance
-python main.py data/li/pdp_100/lc101.txt --format li_lim
+python main.py data/cordeau/pr01.txt --format li_lim
 
 # Initial solution only (skip ALNS)
 python main.py data/cordeau/pr01.txt --no-alns
@@ -21,8 +21,20 @@ python main.py data/cordeau/pr01.txt --no-alns
 # Analyze instance characteristics
 python analyze_instance.py data/cordeau/pr01.txt --plot
 
-# Run with performance profiling
-python run_with_timing.py data/cordeau/pr01.txt --iterations 100 --plot
+# Run tests
+python -m pytest src/tests/
+
+# Run a single test file
+python -m pytest src/tests/test_solution.py
+
+# Run a single test
+python -m pytest src/tests/test_solution.py::test_known_solution_feasibility
+
+# Quick solver demo
+python scripts/run_solver.py
+
+# Download Cordeau benchmark instances
+python scripts/download_cordeau.py
 ```
 
 Dependencies: `pip install alns numpy matplotlib` (Python 3.12, venv in `.venv/`)
@@ -34,26 +46,29 @@ Dependencies: `pip install alns numpy matplotlib` (Python 3.12, venv in `.venv/`
 
 ### Core Modules (src/)
 
-- **instance.py** — Data model: `Node`, `Request`, `Vehicle`, `DARPInstance`. DARPInstance precomputes distance/time matrices on construction.
-- **solution.py** — `Route`, `RouteStop`, `DARPSolution`. Solution implements `objective()` for ALNS (total distance + unassigned penalty). Supports insert/remove of requests and deep copy for destroy-repair cycles.
-- **feasibility.py** — Two constraint-checking implementations:
-  - Simple forward pass (pedagogical, O(n) per route)
-  - Cordeau's 8-step algorithm with forward time slack (optimized for insertion feasibility)
-  - Checks: capacity, time windows, pickup-before-delivery precedence, max ride time, max route duration
-- **alns_solver.py** — ALNS configuration (`ALNSConfig` dataclass), `solve_darp()` using Simulated Annealing acceptance + Roulette Wheel operator selection, `solve_darp_fallback()` for use without ALNS library, `create_initial_solution()` greedy construction.
-- **operators/destroy.py** — Random, worst (cost-based), Shaw (relatedness-based), route removal
-- **operators/repair.py** — Greedy, regret-k, random insertion
+- **instance.py** — Data model: `Node`, `DARPInstance`. Node numbering: 0=origin depot, 1..n=pickups, n+1..2n=deliveries, 2n+1=destination depot. DARPInstance precomputes distance/time matrix on construction.
+- **solution.py** — `RouteSchedule`, `DARPSolution`. Routes are `list[list[int]]` (node IDs per vehicle). Solution implements `objective()` (total distance + 1000 penalty per unassigned request). Scheduling uses Cordeau's 3-step algorithm: forward pass → depot delay optimization → iterative pickup delay. Feasibility checks: time windows, capacity, precedence, ride time, route duration.
+- **initial_solution.py** — `build_initial_solution()`: greedy sequential cheapest-feasible insertion of all requests.
+- **solver.py** — `solve()` orchestrates ALNS: greedy construction → destroy/repair loop with Simulated Annealing acceptance + Roulette Wheel operator selection. Returns `SolverResult` with best/initial solutions and timing.
+- **operators/destroy/random_removal.py** — Removes 10-40% of assigned requests randomly.
+- **operators/repair/greedy_insertion.py** — Reinserts unassigned requests via iterative cheapest feasible insertion.
 
 ### Instance Parsers (src/parsers/)
 
-- **cordeau.py** — Cordeau format: header `K n T Q L`, nodes ordered as depot/pickups/deliveries. Creates virtual end depot.
-- **li_lim.py** — Li & Lim PDPTW format: header `K Q S`, nodes have explicit pickup/delivery index fields. Different indexing scheme mapped to unified DARPInstance.
+- **cordeau.py** — Cordeau format: header `K n T Q L`, nodes ordered as depot/pickups/deliveries. Creates virtual end depot. Computes Euclidean distance matrix.
+- **li_lim.py** — Li & Lim PDPTW format: header `K Q S`, explicit pickup/delivery index fields. Different indexing mapped to unified DARPInstance.
 
 ### Key Design Patterns
 
-- Operators are wrapped as ALNS-compatible callback functions via factory methods
-- Every route modification triggers feasibility validation (forward pass + constraint checks)
+- Operators receive `(DARPSolution, rng)` and return a new solution (ALNS library compatible)
+- Every route modification triggers feasibility validation (scheduling + constraint checks)
 - ALNS copies the solution before each destroy-repair cycle; accepts/rejects via SA criterion
+- Routes are lazily scheduled on-demand (not cached)
+- All `__init__.py` files are empty; use direct imports (e.g., `from src.parsers.cordeau import parse_cordeau`)
+
+### Test Data
+
+Cordeau pr01.txt (3 vehicles, 24 requests) is the primary test instance. Known optimal cost ≈ 190.02. Tests validate against published optimal routes.
 
 ## Thesis Research Context
 
@@ -76,4 +91,4 @@ This implements the methodology from the thesis "ML-Guided ALNS for the Dynamic 
 - Baselines: Insertion Heuristic, VGA, standard ALNS with roulette-wheel
 
 ### Baselines and Comparison
-We evaluate in three levels. Level 1 (static, operator quality): compare all destroy-repair combinations (standard + new operators) on Cordeau instances to assess whether our new operators improve over standard ones. Level 2 (static, selection method): compare ML-guided selection vs. roulette-wheel vs. random selection vs. fixed-best-combo, measuring convergence speed and final solution quality. Level 3 (dynamic, full comparison): rolling-horizon experiments on NYC Manhattan instances, comparing against the Insertion Heuristic and VGA baselines provided in the dataset, plus our standard ALNS (same time budget). 
+We evaluate in three levels. Level 1 (static, operator quality): compare all destroy-repair combinations (standard + new operators) on Cordeau instances to assess whether our new operators improve over standard ones. Level 2 (static, selection method): compare ML-guided selection vs. roulette-wheel vs. random selection vs. fixed-best-combo, measuring convergence speed and final solution quality. Level 3 (dynamic, full comparison): rolling-horizon experiments on NYC Manhattan instances, comparing against the Insertion Heuristic and VGA baselines provided in the dataset, plus our standard ALNS (same time budget).
