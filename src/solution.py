@@ -7,6 +7,8 @@ from dataclasses import dataclass, field
 import numpy as np
 
 from .instance import DARPInstance
+from .feasibility import get_feasibility_checker
+from .feasibility.slack_corrected import check as _slack_check
 
 
 @dataclass
@@ -27,8 +29,10 @@ class DARPSolution:
     Empty routes are [0, 2n+1].
     """
 
-    def __init__(self, instance: DARPInstance):
+    def __init__(self, instance: DARPInstance, feasibility_mode: str = "slack"):
         self.instance = instance
+        self.feasibility_mode = feasibility_mode
+        self._feasibility_checker = get_feasibility_checker(feasibility_mode)
         n = instance.num_requests
         depot_o = 0
         depot_d = 2 * n + 1
@@ -45,6 +49,8 @@ class DARPSolution:
         new.instance = self.instance  # shared, read-only
         new.routes = [route[:] for route in self.routes]
         new.unassigned = set(self.unassigned)
+        new.feasibility_mode = self.feasibility_mode
+        new._feasibility_checker = self._feasibility_checker
         return new
 
     # ------------------------------------------------------------------
@@ -202,83 +208,82 @@ class DARPSolution:
     # Feasibility
     # ------------------------------------------------------------------
 
+    def check_route_feasibility_fast(self, route: list[int]) -> tuple[bool, str]:
+        """Fast O(n) feasibility check using Steps 1+2 plus slack correction.
+
+        Convenience wrapper that always uses the slack-corrected checker,
+        regardless of the solution's configured feasibility mode.
+        """
+        return _slack_check(route, self.instance)
+
     def check_route_feasibility(self, route: list[int]) -> tuple[bool, str]:
-        """Check all constraints for a single route. Returns (feasible, reason)."""
-        inst = self.instance
-        nodes = inst.nodes
-        n = inst.num_requests
-        sched = self.compute_route_schedule(route)
+        """Check all constraints for a single route. Returns (feasible, reason).
 
-        for i, node_id in enumerate(route):
-            node = nodes[node_id]
-
-            # Time window
-            if sched.begin_service[i] > node.latest + 1e-6:
-                return False, (
-                    f"Time window violated at node {node_id}: "
-                    f"begin={sched.begin_service[i]:.2f} > latest={node.latest:.2f}"
-                )
-
-            # Capacity
-            if sched.load[i] < 0 or sched.load[i] > inst.vehicle_capacity:
-                return False, (
-                    f"Capacity violated at node {node_id}: "
-                    f"load={sched.load[i]}, capacity={inst.vehicle_capacity}"
-                )
-
-        # Ride time
-        for req, rt in sched.ride_time.items():
-            if rt > inst.max_ride_time + 1e-6:
-                return False, (
-                    f"Ride time violated for request {req}: "
-                    f"ride_time={rt:.2f} > max={inst.max_ride_time:.2f}"
-                )
-
-        # Route duration
-        route_dur = sched.begin_service[-1] - sched.departure_time[0]
-        if route_dur > inst.max_route_duration + 1e-6:
-            return False, (
-                f"Route duration violated: "
-                f"duration={route_dur:.2f} > max={inst.max_route_duration:.2f}"
-            )
-
-        # Precedence: pickup must appear before delivery
-        seen_pickups = set()
-        for node_id in route:
-            if 1 <= node_id <= n:
-                seen_pickups.add(node_id)
-            elif n + 1 <= node_id <= 2 * n:
-                req = node_id - n
-                if req not in seen_pickups:
-                    return False, f"Precedence violated: delivery {node_id} before pickup {req}"
-
-        return True, ""
+        Delegates to the configured feasibility checker module.
+        """
+        return self._feasibility_checker(route, self.instance)
 
     def is_feasible(self) -> tuple[bool, str]:
-        """Check feasibility of entire solution."""
+        """Check feasibility of entire solution using the full 3-step optimizer."""
         # All requests must be assigned
         if self.unassigned:
             return False, f"Unassigned requests: {self.unassigned}"
 
         # Each request appears exactly once
         seen = set()
+        n = self.instance.num_requests
         for route in self.routes:
             for node_id in route:
-                n = self.instance.num_requests
                 if 1 <= node_id <= n:
                     if node_id in seen:
                         return False, f"Request {node_id} appears in multiple routes"
                     seen.add(node_id)
 
-        if seen != set(range(1, self.instance.num_requests + 1)):
-            missing = set(range(1, self.instance.num_requests + 1)) - seen
+        if seen != set(range(1, n + 1)):
+            missing = set(range(1, n + 1)) - seen
             return False, f"Missing requests: {missing}"
 
-        # Check each route
+        # Check each route with the full optimizer
+        inst = self.instance
+        nodes = inst.nodes
         for k, route in enumerate(self.routes):
-            feasible, reason = self.check_route_feasibility(route)
-            if not feasible:
-                return False, f"Route {k}: {reason}"
+            sched = self.compute_route_schedule(route)
+
+            for i, node_id in enumerate(route):
+                node = nodes[node_id]
+                if sched.begin_service[i] > node.latest + 1e-6:
+                    return False, (
+                        f"Route {k}: Time window violated at node {node_id}: "
+                        f"begin={sched.begin_service[i]:.2f} > latest={node.latest:.2f}"
+                    )
+                if sched.load[i] < 0 or sched.load[i] > inst.vehicle_capacity:
+                    return False, (
+                        f"Route {k}: Capacity violated at node {node_id}: "
+                        f"load={sched.load[i]}, capacity={inst.vehicle_capacity}"
+                    )
+
+            for req, rt in sched.ride_time.items():
+                if rt > inst.max_ride_time + 1e-6:
+                    return False, (
+                        f"Route {k}: Ride time violated for request {req}: "
+                        f"ride_time={rt:.2f} > max={inst.max_ride_time:.2f}"
+                    )
+
+            route_dur = sched.begin_service[-1] - sched.departure_time[0]
+            if route_dur > inst.max_route_duration + 1e-6:
+                return False, (
+                    f"Route {k}: Route duration violated: "
+                    f"duration={route_dur:.2f} > max={inst.max_route_duration:.2f}"
+                )
+
+            seen_pickups = set()
+            for node_id in route:
+                if 1 <= node_id <= n:
+                    seen_pickups.add(node_id)
+                elif n + 1 <= node_id <= 2 * n:
+                    req = node_id - n
+                    if req not in seen_pickups:
+                        return False, f"Route {k}: Precedence violated: delivery {node_id} before pickup {req}"
 
         return True, ""
 

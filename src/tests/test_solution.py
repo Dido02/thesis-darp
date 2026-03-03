@@ -43,8 +43,8 @@ def test_empty_solution():
     # All requests unassigned
     assert sol.unassigned == set(range(1, 25))
 
-    # Objective of empty solution = 0 (depot to depot distance is 0 since same location)
-    assert sol.objective() == 0.0
+    # Objective includes unassigned penalty: 24 requests × 1000
+    assert sol.objective() == 24 * sol.UNASSIGNED_PENALTY
 
     print("  [PASS] empty_solution")
 

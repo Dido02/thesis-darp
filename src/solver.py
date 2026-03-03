@@ -15,6 +15,7 @@ from alns.stop import MaxIterations
 from .instance import DARPInstance
 from .solution import DARPSolution
 from .initial_solution import build_initial_solution
+from .feasibility import get_feasibility_checker
 from .operators.destroy.random_removal import random_removal
 from .operators.repair.greedy_insertion import greedy_insertion
 
@@ -39,6 +40,7 @@ def solve(
     decay: float = 0.8,
     seed: int = 42,
     verbose: bool = True,
+    feasibility_mode: str = "slack",
 ) -> SolverResult:
     """Run ALNS on a DARP instance.
 
@@ -56,6 +58,11 @@ def solve(
         print(f"Initial solution: obj={init_sol.objective():.2f}, "
               f"unassigned={len(init_sol.unassigned)} "
               f"({construction_time:.3f}s)")
+
+    # Switch feasibility mode after construction (initial always uses "slack")
+    if feasibility_mode != "slack":
+        init_sol.feasibility_mode = feasibility_mode
+        init_sol._feasibility_checker = get_feasibility_checker(feasibility_mode)
 
     # Set up ALNS
     alns = ALNS(rng)
@@ -93,6 +100,13 @@ def solve(
     if verbose:
         print(f"Best solution:    obj={best.objective():.2f} ({solve_time:.3f}s)")
 
+    # Post-ALNS feasibility repair: both "slack" and "cordeau" checkers are
+    # approximate — slack is slightly optimistic for ride time, cordeau is
+    # conservative and may leave routes that violate under the full optimizer.
+    # Only "full" mode is exact and needs no repair.
+    if feasibility_mode != "full":
+        best = _repair_ride_times(best, verbose)
+
     return SolverResult(
         best=best,
         initial=init_sol,
@@ -100,3 +114,101 @@ def solve(
         construction_time=construction_time,
         solve_time=solve_time,
     )
+
+
+def _repair_ride_times(sol: DARPSolution, verbose: bool = False) -> DARPSolution:
+    """Remove requests with ride-time violations and reinsert with full check."""
+    inst = sol.instance
+    n = inst.num_requests
+    nodes = inst.nodes
+    tt = inst.travel_time
+
+    # Find requests with ride-time violations using full optimizer
+    to_remove = set()
+    for route in sol.routes:
+        sched = sol.compute_route_schedule(route)
+        for req, rt in sched.ride_time.items():
+            if rt > inst.max_ride_time + 1e-6:
+                to_remove.add(req)
+        route_dur = sched.begin_service[-1] - sched.departure_time[0]
+        if route_dur > inst.max_route_duration + 1e-6:
+            # Remove all requests from this route
+            for nid in route:
+                if 1 <= nid <= n:
+                    to_remove.add(nid)
+
+    if not to_remove:
+        return sol
+
+    if verbose:
+        print(f"  Repairing {len(to_remove)} request(s) with ride-time violations...")
+
+    repaired = sol.copy()
+    for req in to_remove:
+        pickup_id = req
+        delivery_id = req + n
+        for route in repaired.routes:
+            if pickup_id in route:
+                route.remove(pickup_id)
+                route.remove(delivery_id)
+                repaired.unassigned.add(req)
+                break
+
+    # Reinsert using full optimizer feasibility check
+    for req in sorted(repaired.unassigned & to_remove):
+        pickup_id = req
+        delivery_id = req + n
+        best_cost = float("inf")
+        best_k = None
+        best_p = None
+        best_d = None
+
+        for k, route in enumerate(repaired.routes):
+            for p_pos in range(1, len(route)):
+                for d_pos in range(p_pos + 1, len(route) + 1):
+                    candidate = list(route)
+                    candidate.insert(p_pos, pickup_id)
+                    candidate.insert(d_pos, delivery_id)
+
+                    cost = (sum(tt[candidate[i], candidate[i + 1]]
+                                for i in range(len(candidate) - 1))
+                            - sum(tt[route[i], route[i + 1]]
+                                  for i in range(len(route) - 1)))
+                    if cost >= best_cost:
+                        continue
+
+                    # Full optimizer check
+                    sched = repaired.compute_route_schedule(candidate)
+                    ok = True
+                    for j, nid in enumerate(candidate):
+                        if sched.begin_service[j] > nodes[nid].latest + 1e-6:
+                            ok = False
+                            break
+                        if sched.load[j] < 0 or sched.load[j] > inst.vehicle_capacity:
+                            ok = False
+                            break
+                    if ok:
+                        for r, rt in sched.ride_time.items():
+                            if rt > inst.max_ride_time + 1e-6:
+                                ok = False
+                                break
+                    if ok:
+                        rd = sched.begin_service[-1] - sched.departure_time[0]
+                        if rd > inst.max_route_duration + 1e-6:
+                            ok = False
+                    if ok:
+                        best_cost = cost
+                        best_k = k
+                        best_p = p_pos
+                        best_d = d_pos
+
+        if best_k is not None:
+            repaired.routes[best_k].insert(best_p, pickup_id)
+            repaired.routes[best_k].insert(best_d, delivery_id)
+            repaired.unassigned.discard(req)
+
+    if verbose and repaired.unassigned & to_remove:
+        still = repaired.unassigned & to_remove
+        print(f"  Could not reinsert: {still}")
+
+    return repaired
