@@ -73,15 +73,15 @@ CMakeFiles/darp_solver.dir/main.cpp.o: CMakeFiles/darp_solver.dir/flags.make
 CMakeFiles/darp_solver.dir/main.cpp.o: /Users/didodimitrov/Documents/thesis-darp/cpp/main.cpp
 CMakeFiles/darp_solver.dir/main.cpp.o: CMakeFiles/darp_solver.dir/compiler_depend.ts
 	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/Users/didodimitrov/Documents/thesis-darp/cpp/build/CMakeFiles --progress-num=$(CMAKE_PROGRESS_1) "Building CXX object CMakeFiles/darp_solver.dir/main.cpp.o"
-	/Library/Developer/CommandLineTools/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/darp_solver.dir/main.cpp.o -MF CMakeFiles/darp_solver.dir/main.cpp.o.d -o CMakeFiles/darp_solver.dir/main.cpp.o -c /Users/didodimitrov/Documents/thesis-darp/cpp/main.cpp
+	/usr/bin/clang++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/darp_solver.dir/main.cpp.o -MF CMakeFiles/darp_solver.dir/main.cpp.o.d -o CMakeFiles/darp_solver.dir/main.cpp.o -c /Users/didodimitrov/Documents/thesis-darp/cpp/main.cpp
 
 CMakeFiles/darp_solver.dir/main.cpp.i: cmake_force
 	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Preprocessing CXX source to CMakeFiles/darp_solver.dir/main.cpp.i"
-	/Library/Developer/CommandLineTools/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -E /Users/didodimitrov/Documents/thesis-darp/cpp/main.cpp > CMakeFiles/darp_solver.dir/main.cpp.i
+	/usr/bin/clang++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -E /Users/didodimitrov/Documents/thesis-darp/cpp/main.cpp > CMakeFiles/darp_solver.dir/main.cpp.i
 
 CMakeFiles/darp_solver.dir/main.cpp.s: cmake_force
 	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Compiling CXX source to assembly CMakeFiles/darp_solver.dir/main.cpp.s"
-	/Library/Developer/CommandLineTools/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S /Users/didodimitrov/Documents/thesis-darp/cpp/main.cpp -o CMakeFiles/darp_solver.dir/main.cpp.s
+	/usr/bin/clang++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S /Users/didodimitrov/Documents/thesis-darp/cpp/main.cpp -o CMakeFiles/darp_solver.dir/main.cpp.s
 
 # Object files for target darp_solver
 darp_solver_OBJECTS = \

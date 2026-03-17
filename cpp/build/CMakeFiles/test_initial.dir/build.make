@@ -73,15 +73,15 @@ CMakeFiles/test_initial.dir/tests/test_initial.cpp.o: CMakeFiles/test_initial.di
 CMakeFiles/test_initial.dir/tests/test_initial.cpp.o: /Users/didodimitrov/Documents/thesis-darp/cpp/tests/test_initial.cpp
 CMakeFiles/test_initial.dir/tests/test_initial.cpp.o: CMakeFiles/test_initial.dir/compiler_depend.ts
 	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/Users/didodimitrov/Documents/thesis-darp/cpp/build/CMakeFiles --progress-num=$(CMAKE_PROGRESS_1) "Building CXX object CMakeFiles/test_initial.dir/tests/test_initial.cpp.o"
-	/Library/Developer/CommandLineTools/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/test_initial.dir/tests/test_initial.cpp.o -MF CMakeFiles/test_initial.dir/tests/test_initial.cpp.o.d -o CMakeFiles/test_initial.dir/tests/test_initial.cpp.o -c /Users/didodimitrov/Documents/thesis-darp/cpp/tests/test_initial.cpp
+	/usr/bin/clang++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/test_initial.dir/tests/test_initial.cpp.o -MF CMakeFiles/test_initial.dir/tests/test_initial.cpp.o.d -o CMakeFiles/test_initial.dir/tests/test_initial.cpp.o -c /Users/didodimitrov/Documents/thesis-darp/cpp/tests/test_initial.cpp
 
 CMakeFiles/test_initial.dir/tests/test_initial.cpp.i: cmake_force
 	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Preprocessing CXX source to CMakeFiles/test_initial.dir/tests/test_initial.cpp.i"
-	/Library/Developer/CommandLineTools/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -E /Users/didodimitrov/Documents/thesis-darp/cpp/tests/test_initial.cpp > CMakeFiles/test_initial.dir/tests/test_initial.cpp.i
+	/usr/bin/clang++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -E /Users/didodimitrov/Documents/thesis-darp/cpp/tests/test_initial.cpp > CMakeFiles/test_initial.dir/tests/test_initial.cpp.i
 
 CMakeFiles/test_initial.dir/tests/test_initial.cpp.s: cmake_force
 	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Compiling CXX source to assembly CMakeFiles/test_initial.dir/tests/test_initial.cpp.s"
-	/Library/Developer/CommandLineTools/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S /Users/didodimitrov/Documents/thesis-darp/cpp/tests/test_initial.cpp -o CMakeFiles/test_initial.dir/tests/test_initial.cpp.s
+	/usr/bin/clang++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S /Users/didodimitrov/Documents/thesis-darp/cpp/tests/test_initial.cpp -o CMakeFiles/test_initial.dir/tests/test_initial.cpp.s
 
 # Object files for target test_initial
 test_initial_OBJECTS = \

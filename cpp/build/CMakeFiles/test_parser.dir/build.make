@@ -73,15 +73,15 @@ CMakeFiles/test_parser.dir/tests/test_parser.cpp.o: CMakeFiles/test_parser.dir/f
 CMakeFiles/test_parser.dir/tests/test_parser.cpp.o: /Users/didodimitrov/Documents/thesis-darp/cpp/tests/test_parser.cpp
 CMakeFiles/test_parser.dir/tests/test_parser.cpp.o: CMakeFiles/test_parser.dir/compiler_depend.ts
 	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/Users/didodimitrov/Documents/thesis-darp/cpp/build/CMakeFiles --progress-num=$(CMAKE_PROGRESS_1) "Building CXX object CMakeFiles/test_parser.dir/tests/test_parser.cpp.o"
-	/Library/Developer/CommandLineTools/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/test_parser.dir/tests/test_parser.cpp.o -MF CMakeFiles/test_parser.dir/tests/test_parser.cpp.o.d -o CMakeFiles/test_parser.dir/tests/test_parser.cpp.o -c /Users/didodimitrov/Documents/thesis-darp/cpp/tests/test_parser.cpp
+	/usr/bin/clang++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/test_parser.dir/tests/test_parser.cpp.o -MF CMakeFiles/test_parser.dir/tests/test_parser.cpp.o.d -o CMakeFiles/test_parser.dir/tests/test_parser.cpp.o -c /Users/didodimitrov/Documents/thesis-darp/cpp/tests/test_parser.cpp
 
 CMakeFiles/test_parser.dir/tests/test_parser.cpp.i: cmake_force
 	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Preprocessing CXX source to CMakeFiles/test_parser.dir/tests/test_parser.cpp.i"
-	/Library/Developer/CommandLineTools/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -E /Users/didodimitrov/Documents/thesis-darp/cpp/tests/test_parser.cpp > CMakeFiles/test_parser.dir/tests/test_parser.cpp.i
+	/usr/bin/clang++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -E /Users/didodimitrov/Documents/thesis-darp/cpp/tests/test_parser.cpp > CMakeFiles/test_parser.dir/tests/test_parser.cpp.i
 
 CMakeFiles/test_parser.dir/tests/test_parser.cpp.s: cmake_force
 	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Compiling CXX source to assembly CMakeFiles/test_parser.dir/tests/test_parser.cpp.s"
-	/Library/Developer/CommandLineTools/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S /Users/didodimitrov/Documents/thesis-darp/cpp/tests/test_parser.cpp -o CMakeFiles/test_parser.dir/tests/test_parser.cpp.s
+	/usr/bin/clang++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S /Users/didodimitrov/Documents/thesis-darp/cpp/tests/test_parser.cpp -o CMakeFiles/test_parser.dir/tests/test_parser.cpp.s
 
 # Object files for target test_parser
 test_parser_OBJECTS = \

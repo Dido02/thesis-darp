@@ -8,7 +8,7 @@
 static void print_usage(const char* prog) {
     std::cerr << "Usage: " << prog
               << " --instance <path> [--iterations N] [--seed S]"
-              << " [--feasibility slack|full]\n";
+              << " [--feasibility slack|full|o1]\n";
 }
 
 int main(int argc, char* argv[]) {
@@ -27,7 +27,7 @@ int main(int argc, char* argv[]) {
             seed = std::stoi(argv[++i]);
         } else if (arg == "--feasibility" && i + 1 < argc) {
             feasibility_mode = argv[++i];
-            if (feasibility_mode != "slack" && feasibility_mode != "full") {
+            if (feasibility_mode != "slack" && feasibility_mode != "full" && feasibility_mode != "o1") {
                 std::cerr << "Unknown feasibility mode: " << feasibility_mode
                           << " (valid: slack, full)\n";
                 return 1;

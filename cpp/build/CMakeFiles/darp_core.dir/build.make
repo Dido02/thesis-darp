@@ -73,127 +73,127 @@ CMakeFiles/darp_core.dir/src/parsers/cordeau.cpp.o: CMakeFiles/darp_core.dir/fla
 CMakeFiles/darp_core.dir/src/parsers/cordeau.cpp.o: /Users/didodimitrov/Documents/thesis-darp/cpp/src/parsers/cordeau.cpp
 CMakeFiles/darp_core.dir/src/parsers/cordeau.cpp.o: CMakeFiles/darp_core.dir/compiler_depend.ts
 	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/Users/didodimitrov/Documents/thesis-darp/cpp/build/CMakeFiles --progress-num=$(CMAKE_PROGRESS_1) "Building CXX object CMakeFiles/darp_core.dir/src/parsers/cordeau.cpp.o"
-	/Library/Developer/CommandLineTools/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/darp_core.dir/src/parsers/cordeau.cpp.o -MF CMakeFiles/darp_core.dir/src/parsers/cordeau.cpp.o.d -o CMakeFiles/darp_core.dir/src/parsers/cordeau.cpp.o -c /Users/didodimitrov/Documents/thesis-darp/cpp/src/parsers/cordeau.cpp
+	/usr/bin/clang++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/darp_core.dir/src/parsers/cordeau.cpp.o -MF CMakeFiles/darp_core.dir/src/parsers/cordeau.cpp.o.d -o CMakeFiles/darp_core.dir/src/parsers/cordeau.cpp.o -c /Users/didodimitrov/Documents/thesis-darp/cpp/src/parsers/cordeau.cpp
 
 CMakeFiles/darp_core.dir/src/parsers/cordeau.cpp.i: cmake_force
 	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Preprocessing CXX source to CMakeFiles/darp_core.dir/src/parsers/cordeau.cpp.i"
-	/Library/Developer/CommandLineTools/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -E /Users/didodimitrov/Documents/thesis-darp/cpp/src/parsers/cordeau.cpp > CMakeFiles/darp_core.dir/src/parsers/cordeau.cpp.i
+	/usr/bin/clang++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -E /Users/didodimitrov/Documents/thesis-darp/cpp/src/parsers/cordeau.cpp > CMakeFiles/darp_core.dir/src/parsers/cordeau.cpp.i
 
 CMakeFiles/darp_core.dir/src/parsers/cordeau.cpp.s: cmake_force
 	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Compiling CXX source to assembly CMakeFiles/darp_core.dir/src/parsers/cordeau.cpp.s"
-	/Library/Developer/CommandLineTools/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S /Users/didodimitrov/Documents/thesis-darp/cpp/src/parsers/cordeau.cpp -o CMakeFiles/darp_core.dir/src/parsers/cordeau.cpp.s
+	/usr/bin/clang++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S /Users/didodimitrov/Documents/thesis-darp/cpp/src/parsers/cordeau.cpp -o CMakeFiles/darp_core.dir/src/parsers/cordeau.cpp.s
 
 CMakeFiles/darp_core.dir/src/solution.cpp.o: CMakeFiles/darp_core.dir/flags.make
 CMakeFiles/darp_core.dir/src/solution.cpp.o: /Users/didodimitrov/Documents/thesis-darp/cpp/src/solution.cpp
 CMakeFiles/darp_core.dir/src/solution.cpp.o: CMakeFiles/darp_core.dir/compiler_depend.ts
 	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/Users/didodimitrov/Documents/thesis-darp/cpp/build/CMakeFiles --progress-num=$(CMAKE_PROGRESS_2) "Building CXX object CMakeFiles/darp_core.dir/src/solution.cpp.o"
-	/Library/Developer/CommandLineTools/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/darp_core.dir/src/solution.cpp.o -MF CMakeFiles/darp_core.dir/src/solution.cpp.o.d -o CMakeFiles/darp_core.dir/src/solution.cpp.o -c /Users/didodimitrov/Documents/thesis-darp/cpp/src/solution.cpp
+	/usr/bin/clang++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/darp_core.dir/src/solution.cpp.o -MF CMakeFiles/darp_core.dir/src/solution.cpp.o.d -o CMakeFiles/darp_core.dir/src/solution.cpp.o -c /Users/didodimitrov/Documents/thesis-darp/cpp/src/solution.cpp
 
 CMakeFiles/darp_core.dir/src/solution.cpp.i: cmake_force
 	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Preprocessing CXX source to CMakeFiles/darp_core.dir/src/solution.cpp.i"
-	/Library/Developer/CommandLineTools/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -E /Users/didodimitrov/Documents/thesis-darp/cpp/src/solution.cpp > CMakeFiles/darp_core.dir/src/solution.cpp.i
+	/usr/bin/clang++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -E /Users/didodimitrov/Documents/thesis-darp/cpp/src/solution.cpp > CMakeFiles/darp_core.dir/src/solution.cpp.i
 
 CMakeFiles/darp_core.dir/src/solution.cpp.s: cmake_force
 	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Compiling CXX source to assembly CMakeFiles/darp_core.dir/src/solution.cpp.s"
-	/Library/Developer/CommandLineTools/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S /Users/didodimitrov/Documents/thesis-darp/cpp/src/solution.cpp -o CMakeFiles/darp_core.dir/src/solution.cpp.s
+	/usr/bin/clang++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S /Users/didodimitrov/Documents/thesis-darp/cpp/src/solution.cpp -o CMakeFiles/darp_core.dir/src/solution.cpp.s
 
 CMakeFiles/darp_core.dir/src/initial_solution.cpp.o: CMakeFiles/darp_core.dir/flags.make
 CMakeFiles/darp_core.dir/src/initial_solution.cpp.o: /Users/didodimitrov/Documents/thesis-darp/cpp/src/initial_solution.cpp
 CMakeFiles/darp_core.dir/src/initial_solution.cpp.o: CMakeFiles/darp_core.dir/compiler_depend.ts
 	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/Users/didodimitrov/Documents/thesis-darp/cpp/build/CMakeFiles --progress-num=$(CMAKE_PROGRESS_3) "Building CXX object CMakeFiles/darp_core.dir/src/initial_solution.cpp.o"
-	/Library/Developer/CommandLineTools/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/darp_core.dir/src/initial_solution.cpp.o -MF CMakeFiles/darp_core.dir/src/initial_solution.cpp.o.d -o CMakeFiles/darp_core.dir/src/initial_solution.cpp.o -c /Users/didodimitrov/Documents/thesis-darp/cpp/src/initial_solution.cpp
+	/usr/bin/clang++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/darp_core.dir/src/initial_solution.cpp.o -MF CMakeFiles/darp_core.dir/src/initial_solution.cpp.o.d -o CMakeFiles/darp_core.dir/src/initial_solution.cpp.o -c /Users/didodimitrov/Documents/thesis-darp/cpp/src/initial_solution.cpp
 
 CMakeFiles/darp_core.dir/src/initial_solution.cpp.i: cmake_force
 	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Preprocessing CXX source to CMakeFiles/darp_core.dir/src/initial_solution.cpp.i"
-	/Library/Developer/CommandLineTools/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -E /Users/didodimitrov/Documents/thesis-darp/cpp/src/initial_solution.cpp > CMakeFiles/darp_core.dir/src/initial_solution.cpp.i
+	/usr/bin/clang++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -E /Users/didodimitrov/Documents/thesis-darp/cpp/src/initial_solution.cpp > CMakeFiles/darp_core.dir/src/initial_solution.cpp.i
 
 CMakeFiles/darp_core.dir/src/initial_solution.cpp.s: cmake_force
 	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Compiling CXX source to assembly CMakeFiles/darp_core.dir/src/initial_solution.cpp.s"
-	/Library/Developer/CommandLineTools/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S /Users/didodimitrov/Documents/thesis-darp/cpp/src/initial_solution.cpp -o CMakeFiles/darp_core.dir/src/initial_solution.cpp.s
+	/usr/bin/clang++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S /Users/didodimitrov/Documents/thesis-darp/cpp/src/initial_solution.cpp -o CMakeFiles/darp_core.dir/src/initial_solution.cpp.s
 
 CMakeFiles/darp_core.dir/src/solver.cpp.o: CMakeFiles/darp_core.dir/flags.make
 CMakeFiles/darp_core.dir/src/solver.cpp.o: /Users/didodimitrov/Documents/thesis-darp/cpp/src/solver.cpp
 CMakeFiles/darp_core.dir/src/solver.cpp.o: CMakeFiles/darp_core.dir/compiler_depend.ts
 	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/Users/didodimitrov/Documents/thesis-darp/cpp/build/CMakeFiles --progress-num=$(CMAKE_PROGRESS_4) "Building CXX object CMakeFiles/darp_core.dir/src/solver.cpp.o"
-	/Library/Developer/CommandLineTools/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/darp_core.dir/src/solver.cpp.o -MF CMakeFiles/darp_core.dir/src/solver.cpp.o.d -o CMakeFiles/darp_core.dir/src/solver.cpp.o -c /Users/didodimitrov/Documents/thesis-darp/cpp/src/solver.cpp
+	/usr/bin/clang++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/darp_core.dir/src/solver.cpp.o -MF CMakeFiles/darp_core.dir/src/solver.cpp.o.d -o CMakeFiles/darp_core.dir/src/solver.cpp.o -c /Users/didodimitrov/Documents/thesis-darp/cpp/src/solver.cpp
 
 CMakeFiles/darp_core.dir/src/solver.cpp.i: cmake_force
 	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Preprocessing CXX source to CMakeFiles/darp_core.dir/src/solver.cpp.i"
-	/Library/Developer/CommandLineTools/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -E /Users/didodimitrov/Documents/thesis-darp/cpp/src/solver.cpp > CMakeFiles/darp_core.dir/src/solver.cpp.i
+	/usr/bin/clang++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -E /Users/didodimitrov/Documents/thesis-darp/cpp/src/solver.cpp > CMakeFiles/darp_core.dir/src/solver.cpp.i
 
 CMakeFiles/darp_core.dir/src/solver.cpp.s: cmake_force
 	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Compiling CXX source to assembly CMakeFiles/darp_core.dir/src/solver.cpp.s"
-	/Library/Developer/CommandLineTools/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S /Users/didodimitrov/Documents/thesis-darp/cpp/src/solver.cpp -o CMakeFiles/darp_core.dir/src/solver.cpp.s
+	/usr/bin/clang++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S /Users/didodimitrov/Documents/thesis-darp/cpp/src/solver.cpp -o CMakeFiles/darp_core.dir/src/solver.cpp.s
 
 CMakeFiles/darp_core.dir/src/feasibility/slack_corrected.cpp.o: CMakeFiles/darp_core.dir/flags.make
 CMakeFiles/darp_core.dir/src/feasibility/slack_corrected.cpp.o: /Users/didodimitrov/Documents/thesis-darp/cpp/src/feasibility/slack_corrected.cpp
 CMakeFiles/darp_core.dir/src/feasibility/slack_corrected.cpp.o: CMakeFiles/darp_core.dir/compiler_depend.ts
 	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/Users/didodimitrov/Documents/thesis-darp/cpp/build/CMakeFiles --progress-num=$(CMAKE_PROGRESS_5) "Building CXX object CMakeFiles/darp_core.dir/src/feasibility/slack_corrected.cpp.o"
-	/Library/Developer/CommandLineTools/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/darp_core.dir/src/feasibility/slack_corrected.cpp.o -MF CMakeFiles/darp_core.dir/src/feasibility/slack_corrected.cpp.o.d -o CMakeFiles/darp_core.dir/src/feasibility/slack_corrected.cpp.o -c /Users/didodimitrov/Documents/thesis-darp/cpp/src/feasibility/slack_corrected.cpp
+	/usr/bin/clang++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/darp_core.dir/src/feasibility/slack_corrected.cpp.o -MF CMakeFiles/darp_core.dir/src/feasibility/slack_corrected.cpp.o.d -o CMakeFiles/darp_core.dir/src/feasibility/slack_corrected.cpp.o -c /Users/didodimitrov/Documents/thesis-darp/cpp/src/feasibility/slack_corrected.cpp
 
 CMakeFiles/darp_core.dir/src/feasibility/slack_corrected.cpp.i: cmake_force
 	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Preprocessing CXX source to CMakeFiles/darp_core.dir/src/feasibility/slack_corrected.cpp.i"
-	/Library/Developer/CommandLineTools/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -E /Users/didodimitrov/Documents/thesis-darp/cpp/src/feasibility/slack_corrected.cpp > CMakeFiles/darp_core.dir/src/feasibility/slack_corrected.cpp.i
+	/usr/bin/clang++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -E /Users/didodimitrov/Documents/thesis-darp/cpp/src/feasibility/slack_corrected.cpp > CMakeFiles/darp_core.dir/src/feasibility/slack_corrected.cpp.i
 
 CMakeFiles/darp_core.dir/src/feasibility/slack_corrected.cpp.s: cmake_force
 	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Compiling CXX source to assembly CMakeFiles/darp_core.dir/src/feasibility/slack_corrected.cpp.s"
-	/Library/Developer/CommandLineTools/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S /Users/didodimitrov/Documents/thesis-darp/cpp/src/feasibility/slack_corrected.cpp -o CMakeFiles/darp_core.dir/src/feasibility/slack_corrected.cpp.s
+	/usr/bin/clang++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S /Users/didodimitrov/Documents/thesis-darp/cpp/src/feasibility/slack_corrected.cpp -o CMakeFiles/darp_core.dir/src/feasibility/slack_corrected.cpp.s
 
 CMakeFiles/darp_core.dir/src/feasibility/full_optimizer.cpp.o: CMakeFiles/darp_core.dir/flags.make
 CMakeFiles/darp_core.dir/src/feasibility/full_optimizer.cpp.o: /Users/didodimitrov/Documents/thesis-darp/cpp/src/feasibility/full_optimizer.cpp
 CMakeFiles/darp_core.dir/src/feasibility/full_optimizer.cpp.o: CMakeFiles/darp_core.dir/compiler_depend.ts
 	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/Users/didodimitrov/Documents/thesis-darp/cpp/build/CMakeFiles --progress-num=$(CMAKE_PROGRESS_6) "Building CXX object CMakeFiles/darp_core.dir/src/feasibility/full_optimizer.cpp.o"
-	/Library/Developer/CommandLineTools/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/darp_core.dir/src/feasibility/full_optimizer.cpp.o -MF CMakeFiles/darp_core.dir/src/feasibility/full_optimizer.cpp.o.d -o CMakeFiles/darp_core.dir/src/feasibility/full_optimizer.cpp.o -c /Users/didodimitrov/Documents/thesis-darp/cpp/src/feasibility/full_optimizer.cpp
+	/usr/bin/clang++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/darp_core.dir/src/feasibility/full_optimizer.cpp.o -MF CMakeFiles/darp_core.dir/src/feasibility/full_optimizer.cpp.o.d -o CMakeFiles/darp_core.dir/src/feasibility/full_optimizer.cpp.o -c /Users/didodimitrov/Documents/thesis-darp/cpp/src/feasibility/full_optimizer.cpp
 
 CMakeFiles/darp_core.dir/src/feasibility/full_optimizer.cpp.i: cmake_force
 	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Preprocessing CXX source to CMakeFiles/darp_core.dir/src/feasibility/full_optimizer.cpp.i"
-	/Library/Developer/CommandLineTools/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -E /Users/didodimitrov/Documents/thesis-darp/cpp/src/feasibility/full_optimizer.cpp > CMakeFiles/darp_core.dir/src/feasibility/full_optimizer.cpp.i
+	/usr/bin/clang++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -E /Users/didodimitrov/Documents/thesis-darp/cpp/src/feasibility/full_optimizer.cpp > CMakeFiles/darp_core.dir/src/feasibility/full_optimizer.cpp.i
 
 CMakeFiles/darp_core.dir/src/feasibility/full_optimizer.cpp.s: cmake_force
 	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Compiling CXX source to assembly CMakeFiles/darp_core.dir/src/feasibility/full_optimizer.cpp.s"
-	/Library/Developer/CommandLineTools/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S /Users/didodimitrov/Documents/thesis-darp/cpp/src/feasibility/full_optimizer.cpp -o CMakeFiles/darp_core.dir/src/feasibility/full_optimizer.cpp.s
+	/usr/bin/clang++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S /Users/didodimitrov/Documents/thesis-darp/cpp/src/feasibility/full_optimizer.cpp -o CMakeFiles/darp_core.dir/src/feasibility/full_optimizer.cpp.s
 
 CMakeFiles/darp_core.dir/src/feasibility/o1_feasibility.cpp.o: CMakeFiles/darp_core.dir/flags.make
 CMakeFiles/darp_core.dir/src/feasibility/o1_feasibility.cpp.o: /Users/didodimitrov/Documents/thesis-darp/cpp/src/feasibility/o1_feasibility.cpp
 CMakeFiles/darp_core.dir/src/feasibility/o1_feasibility.cpp.o: CMakeFiles/darp_core.dir/compiler_depend.ts
 	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/Users/didodimitrov/Documents/thesis-darp/cpp/build/CMakeFiles --progress-num=$(CMAKE_PROGRESS_7) "Building CXX object CMakeFiles/darp_core.dir/src/feasibility/o1_feasibility.cpp.o"
-	/Library/Developer/CommandLineTools/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/darp_core.dir/src/feasibility/o1_feasibility.cpp.o -MF CMakeFiles/darp_core.dir/src/feasibility/o1_feasibility.cpp.o.d -o CMakeFiles/darp_core.dir/src/feasibility/o1_feasibility.cpp.o -c /Users/didodimitrov/Documents/thesis-darp/cpp/src/feasibility/o1_feasibility.cpp
+	/usr/bin/clang++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/darp_core.dir/src/feasibility/o1_feasibility.cpp.o -MF CMakeFiles/darp_core.dir/src/feasibility/o1_feasibility.cpp.o.d -o CMakeFiles/darp_core.dir/src/feasibility/o1_feasibility.cpp.o -c /Users/didodimitrov/Documents/thesis-darp/cpp/src/feasibility/o1_feasibility.cpp
 
 CMakeFiles/darp_core.dir/src/feasibility/o1_feasibility.cpp.i: cmake_force
 	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Preprocessing CXX source to CMakeFiles/darp_core.dir/src/feasibility/o1_feasibility.cpp.i"
-	/Library/Developer/CommandLineTools/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -E /Users/didodimitrov/Documents/thesis-darp/cpp/src/feasibility/o1_feasibility.cpp > CMakeFiles/darp_core.dir/src/feasibility/o1_feasibility.cpp.i
+	/usr/bin/clang++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -E /Users/didodimitrov/Documents/thesis-darp/cpp/src/feasibility/o1_feasibility.cpp > CMakeFiles/darp_core.dir/src/feasibility/o1_feasibility.cpp.i
 
 CMakeFiles/darp_core.dir/src/feasibility/o1_feasibility.cpp.s: cmake_force
 	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Compiling CXX source to assembly CMakeFiles/darp_core.dir/src/feasibility/o1_feasibility.cpp.s"
-	/Library/Developer/CommandLineTools/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S /Users/didodimitrov/Documents/thesis-darp/cpp/src/feasibility/o1_feasibility.cpp -o CMakeFiles/darp_core.dir/src/feasibility/o1_feasibility.cpp.s
+	/usr/bin/clang++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S /Users/didodimitrov/Documents/thesis-darp/cpp/src/feasibility/o1_feasibility.cpp -o CMakeFiles/darp_core.dir/src/feasibility/o1_feasibility.cpp.s
 
 CMakeFiles/darp_core.dir/src/operators/destroy/random_removal.cpp.o: CMakeFiles/darp_core.dir/flags.make
 CMakeFiles/darp_core.dir/src/operators/destroy/random_removal.cpp.o: /Users/didodimitrov/Documents/thesis-darp/cpp/src/operators/destroy/random_removal.cpp
 CMakeFiles/darp_core.dir/src/operators/destroy/random_removal.cpp.o: CMakeFiles/darp_core.dir/compiler_depend.ts
 	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/Users/didodimitrov/Documents/thesis-darp/cpp/build/CMakeFiles --progress-num=$(CMAKE_PROGRESS_8) "Building CXX object CMakeFiles/darp_core.dir/src/operators/destroy/random_removal.cpp.o"
-	/Library/Developer/CommandLineTools/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/darp_core.dir/src/operators/destroy/random_removal.cpp.o -MF CMakeFiles/darp_core.dir/src/operators/destroy/random_removal.cpp.o.d -o CMakeFiles/darp_core.dir/src/operators/destroy/random_removal.cpp.o -c /Users/didodimitrov/Documents/thesis-darp/cpp/src/operators/destroy/random_removal.cpp
+	/usr/bin/clang++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/darp_core.dir/src/operators/destroy/random_removal.cpp.o -MF CMakeFiles/darp_core.dir/src/operators/destroy/random_removal.cpp.o.d -o CMakeFiles/darp_core.dir/src/operators/destroy/random_removal.cpp.o -c /Users/didodimitrov/Documents/thesis-darp/cpp/src/operators/destroy/random_removal.cpp
 
 CMakeFiles/darp_core.dir/src/operators/destroy/random_removal.cpp.i: cmake_force
 	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Preprocessing CXX source to CMakeFiles/darp_core.dir/src/operators/destroy/random_removal.cpp.i"
-	/Library/Developer/CommandLineTools/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -E /Users/didodimitrov/Documents/thesis-darp/cpp/src/operators/destroy/random_removal.cpp > CMakeFiles/darp_core.dir/src/operators/destroy/random_removal.cpp.i
+	/usr/bin/clang++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -E /Users/didodimitrov/Documents/thesis-darp/cpp/src/operators/destroy/random_removal.cpp > CMakeFiles/darp_core.dir/src/operators/destroy/random_removal.cpp.i
 
 CMakeFiles/darp_core.dir/src/operators/destroy/random_removal.cpp.s: cmake_force
 	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Compiling CXX source to assembly CMakeFiles/darp_core.dir/src/operators/destroy/random_removal.cpp.s"
-	/Library/Developer/CommandLineTools/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S /Users/didodimitrov/Documents/thesis-darp/cpp/src/operators/destroy/random_removal.cpp -o CMakeFiles/darp_core.dir/src/operators/destroy/random_removal.cpp.s
+	/usr/bin/clang++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S /Users/didodimitrov/Documents/thesis-darp/cpp/src/operators/destroy/random_removal.cpp -o CMakeFiles/darp_core.dir/src/operators/destroy/random_removal.cpp.s
 
 CMakeFiles/darp_core.dir/src/operators/repair/greedy_insertion.cpp.o: CMakeFiles/darp_core.dir/flags.make
 CMakeFiles/darp_core.dir/src/operators/repair/greedy_insertion.cpp.o: /Users/didodimitrov/Documents/thesis-darp/cpp/src/operators/repair/greedy_insertion.cpp
 CMakeFiles/darp_core.dir/src/operators/repair/greedy_insertion.cpp.o: CMakeFiles/darp_core.dir/compiler_depend.ts
 	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/Users/didodimitrov/Documents/thesis-darp/cpp/build/CMakeFiles --progress-num=$(CMAKE_PROGRESS_9) "Building CXX object CMakeFiles/darp_core.dir/src/operators/repair/greedy_insertion.cpp.o"
-	/Library/Developer/CommandLineTools/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/darp_core.dir/src/operators/repair/greedy_insertion.cpp.o -MF CMakeFiles/darp_core.dir/src/operators/repair/greedy_insertion.cpp.o.d -o CMakeFiles/darp_core.dir/src/operators/repair/greedy_insertion.cpp.o -c /Users/didodimitrov/Documents/thesis-darp/cpp/src/operators/repair/greedy_insertion.cpp
+	/usr/bin/clang++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/darp_core.dir/src/operators/repair/greedy_insertion.cpp.o -MF CMakeFiles/darp_core.dir/src/operators/repair/greedy_insertion.cpp.o.d -o CMakeFiles/darp_core.dir/src/operators/repair/greedy_insertion.cpp.o -c /Users/didodimitrov/Documents/thesis-darp/cpp/src/operators/repair/greedy_insertion.cpp
 
 CMakeFiles/darp_core.dir/src/operators/repair/greedy_insertion.cpp.i: cmake_force
 	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Preprocessing CXX source to CMakeFiles/darp_core.dir/src/operators/repair/greedy_insertion.cpp.i"
-	/Library/Developer/CommandLineTools/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -E /Users/didodimitrov/Documents/thesis-darp/cpp/src/operators/repair/greedy_insertion.cpp > CMakeFiles/darp_core.dir/src/operators/repair/greedy_insertion.cpp.i
+	/usr/bin/clang++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -E /Users/didodimitrov/Documents/thesis-darp/cpp/src/operators/repair/greedy_insertion.cpp > CMakeFiles/darp_core.dir/src/operators/repair/greedy_insertion.cpp.i
 
 CMakeFiles/darp_core.dir/src/operators/repair/greedy_insertion.cpp.s: cmake_force
 	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Compiling CXX source to assembly CMakeFiles/darp_core.dir/src/operators/repair/greedy_insertion.cpp.s"
-	/Library/Developer/CommandLineTools/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S /Users/didodimitrov/Documents/thesis-darp/cpp/src/operators/repair/greedy_insertion.cpp -o CMakeFiles/darp_core.dir/src/operators/repair/greedy_insertion.cpp.s
+	/usr/bin/clang++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S /Users/didodimitrov/Documents/thesis-darp/cpp/src/operators/repair/greedy_insertion.cpp -o CMakeFiles/darp_core.dir/src/operators/repair/greedy_insertion.cpp.s
 
 # Object files for target darp_core
 darp_core_OBJECTS = \

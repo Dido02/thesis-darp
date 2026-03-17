@@ -73,15 +73,15 @@ CMakeFiles/test_solver.dir/tests/test_solver.cpp.o: CMakeFiles/test_solver.dir/f
 CMakeFiles/test_solver.dir/tests/test_solver.cpp.o: /Users/didodimitrov/Documents/thesis-darp/cpp/tests/test_solver.cpp
 CMakeFiles/test_solver.dir/tests/test_solver.cpp.o: CMakeFiles/test_solver.dir/compiler_depend.ts
 	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/Users/didodimitrov/Documents/thesis-darp/cpp/build/CMakeFiles --progress-num=$(CMAKE_PROGRESS_1) "Building CXX object CMakeFiles/test_solver.dir/tests/test_solver.cpp.o"
-	/Library/Developer/CommandLineTools/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/test_solver.dir/tests/test_solver.cpp.o -MF CMakeFiles/test_solver.dir/tests/test_solver.cpp.o.d -o CMakeFiles/test_solver.dir/tests/test_solver.cpp.o -c /Users/didodimitrov/Documents/thesis-darp/cpp/tests/test_solver.cpp
+	/usr/bin/clang++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/test_solver.dir/tests/test_solver.cpp.o -MF CMakeFiles/test_solver.dir/tests/test_solver.cpp.o.d -o CMakeFiles/test_solver.dir/tests/test_solver.cpp.o -c /Users/didodimitrov/Documents/thesis-darp/cpp/tests/test_solver.cpp
 
 CMakeFiles/test_solver.dir/tests/test_solver.cpp.i: cmake_force
 	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Preprocessing CXX source to CMakeFiles/test_solver.dir/tests/test_solver.cpp.i"
-	/Library/Developer/CommandLineTools/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -E /Users/didodimitrov/Documents/thesis-darp/cpp/tests/test_solver.cpp > CMakeFiles/test_solver.dir/tests/test_solver.cpp.i
+	/usr/bin/clang++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -E /Users/didodimitrov/Documents/thesis-darp/cpp/tests/test_solver.cpp > CMakeFiles/test_solver.dir/tests/test_solver.cpp.i
 
 CMakeFiles/test_solver.dir/tests/test_solver.cpp.s: cmake_force
 	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Compiling CXX source to assembly CMakeFiles/test_solver.dir/tests/test_solver.cpp.s"
-	/Library/Developer/CommandLineTools/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S /Users/didodimitrov/Documents/thesis-darp/cpp/tests/test_solver.cpp -o CMakeFiles/test_solver.dir/tests/test_solver.cpp.s
+	/usr/bin/clang++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S /Users/didodimitrov/Documents/thesis-darp/cpp/tests/test_solver.cpp -o CMakeFiles/test_solver.dir/tests/test_solver.cpp.s
 
 # Object files for target test_solver
 test_solver_OBJECTS = \

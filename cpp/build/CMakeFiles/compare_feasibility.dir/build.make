@@ -73,15 +73,15 @@ CMakeFiles/compare_feasibility.dir/tests/compare_feasibility.cpp.o: CMakeFiles/c
 CMakeFiles/compare_feasibility.dir/tests/compare_feasibility.cpp.o: /Users/didodimitrov/Documents/thesis-darp/cpp/tests/compare_feasibility.cpp
 CMakeFiles/compare_feasibility.dir/tests/compare_feasibility.cpp.o: CMakeFiles/compare_feasibility.dir/compiler_depend.ts
 	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/Users/didodimitrov/Documents/thesis-darp/cpp/build/CMakeFiles --progress-num=$(CMAKE_PROGRESS_1) "Building CXX object CMakeFiles/compare_feasibility.dir/tests/compare_feasibility.cpp.o"
-	/Library/Developer/CommandLineTools/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/compare_feasibility.dir/tests/compare_feasibility.cpp.o -MF CMakeFiles/compare_feasibility.dir/tests/compare_feasibility.cpp.o.d -o CMakeFiles/compare_feasibility.dir/tests/compare_feasibility.cpp.o -c /Users/didodimitrov/Documents/thesis-darp/cpp/tests/compare_feasibility.cpp
+	/usr/bin/clang++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/compare_feasibility.dir/tests/compare_feasibility.cpp.o -MF CMakeFiles/compare_feasibility.dir/tests/compare_feasibility.cpp.o.d -o CMakeFiles/compare_feasibility.dir/tests/compare_feasibility.cpp.o -c /Users/didodimitrov/Documents/thesis-darp/cpp/tests/compare_feasibility.cpp
 
 CMakeFiles/compare_feasibility.dir/tests/compare_feasibility.cpp.i: cmake_force
 	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Preprocessing CXX source to CMakeFiles/compare_feasibility.dir/tests/compare_feasibility.cpp.i"
-	/Library/Developer/CommandLineTools/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -E /Users/didodimitrov/Documents/thesis-darp/cpp/tests/compare_feasibility.cpp > CMakeFiles/compare_feasibility.dir/tests/compare_feasibility.cpp.i
+	/usr/bin/clang++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -E /Users/didodimitrov/Documents/thesis-darp/cpp/tests/compare_feasibility.cpp > CMakeFiles/compare_feasibility.dir/tests/compare_feasibility.cpp.i
 
 CMakeFiles/compare_feasibility.dir/tests/compare_feasibility.cpp.s: cmake_force
 	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Compiling CXX source to assembly CMakeFiles/compare_feasibility.dir/tests/compare_feasibility.cpp.s"
-	/Library/Developer/CommandLineTools/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S /Users/didodimitrov/Documents/thesis-darp/cpp/tests/compare_feasibility.cpp -o CMakeFiles/compare_feasibility.dir/tests/compare_feasibility.cpp.s
+	/usr/bin/clang++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S /Users/didodimitrov/Documents/thesis-darp/cpp/tests/compare_feasibility.cpp -o CMakeFiles/compare_feasibility.dir/tests/compare_feasibility.cpp.s
 
 # Object files for target compare_feasibility
 compare_feasibility_OBJECTS = \

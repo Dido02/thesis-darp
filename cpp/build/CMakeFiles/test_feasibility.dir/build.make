@@ -73,15 +73,15 @@ CMakeFiles/test_feasibility.dir/tests/test_feasibility.cpp.o: CMakeFiles/test_fe
 CMakeFiles/test_feasibility.dir/tests/test_feasibility.cpp.o: /Users/didodimitrov/Documents/thesis-darp/cpp/tests/test_feasibility.cpp
 CMakeFiles/test_feasibility.dir/tests/test_feasibility.cpp.o: CMakeFiles/test_feasibility.dir/compiler_depend.ts
 	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/Users/didodimitrov/Documents/thesis-darp/cpp/build/CMakeFiles --progress-num=$(CMAKE_PROGRESS_1) "Building CXX object CMakeFiles/test_feasibility.dir/tests/test_feasibility.cpp.o"
-	/Library/Developer/CommandLineTools/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/test_feasibility.dir/tests/test_feasibility.cpp.o -MF CMakeFiles/test_feasibility.dir/tests/test_feasibility.cpp.o.d -o CMakeFiles/test_feasibility.dir/tests/test_feasibility.cpp.o -c /Users/didodimitrov/Documents/thesis-darp/cpp/tests/test_feasibility.cpp
+	/usr/bin/clang++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/test_feasibility.dir/tests/test_feasibility.cpp.o -MF CMakeFiles/test_feasibility.dir/tests/test_feasibility.cpp.o.d -o CMakeFiles/test_feasibility.dir/tests/test_feasibility.cpp.o -c /Users/didodimitrov/Documents/thesis-darp/cpp/tests/test_feasibility.cpp
 
 CMakeFiles/test_feasibility.dir/tests/test_feasibility.cpp.i: cmake_force
 	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Preprocessing CXX source to CMakeFiles/test_feasibility.dir/tests/test_feasibility.cpp.i"
-	/Library/Developer/CommandLineTools/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -E /Users/didodimitrov/Documents/thesis-darp/cpp/tests/test_feasibility.cpp > CMakeFiles/test_feasibility.dir/tests/test_feasibility.cpp.i
+	/usr/bin/clang++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -E /Users/didodimitrov/Documents/thesis-darp/cpp/tests/test_feasibility.cpp > CMakeFiles/test_feasibility.dir/tests/test_feasibility.cpp.i
 
 CMakeFiles/test_feasibility.dir/tests/test_feasibility.cpp.s: cmake_force
 	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Compiling CXX source to assembly CMakeFiles/test_feasibility.dir/tests/test_feasibility.cpp.s"
-	/Library/Developer/CommandLineTools/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S /Users/didodimitrov/Documents/thesis-darp/cpp/tests/test_feasibility.cpp -o CMakeFiles/test_feasibility.dir/tests/test_feasibility.cpp.s
+	/usr/bin/clang++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S /Users/didodimitrov/Documents/thesis-darp/cpp/tests/test_feasibility.cpp -o CMakeFiles/test_feasibility.dir/tests/test_feasibility.cpp.s
 
 # Object files for target test_feasibility
 test_feasibility_OBJECTS = \
