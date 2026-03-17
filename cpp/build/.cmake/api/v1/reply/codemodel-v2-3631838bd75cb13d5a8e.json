@@ -1,0 +1,123 @@
+{
+	"configurations" : 
+	[
+		{
+			"directories" : 
+			[
+				{
+					"build" : ".",
+					"jsonFile" : "directory-.-Release-f5ebdc15457944623624.json",
+					"minimumCMakeVersion" : 
+					{
+						"string" : "3.14"
+					},
+					"projectIndex" : 0,
+					"source" : ".",
+					"targetIndexes" : 
+					[
+						0,
+						1,
+						2,
+						3,
+						4,
+						5,
+						6,
+						7
+					]
+				}
+			],
+			"name" : "Release",
+			"projects" : 
+			[
+				{
+					"directoryIndexes" : 
+					[
+						0
+					],
+					"name" : "darp_solver",
+					"targetIndexes" : 
+					[
+						0,
+						1,
+						2,
+						3,
+						4,
+						5,
+						6,
+						7
+					]
+				}
+			],
+			"targets" : 
+			[
+				{
+					"directoryIndex" : 0,
+					"id" : "compare_feasibility::@6890427a1f51a3e7e1df",
+					"jsonFile" : "target-compare_feasibility-Release-4f145a97b306141e92e6.json",
+					"name" : "compare_feasibility",
+					"projectIndex" : 0
+				},
+				{
+					"directoryIndex" : 0,
+					"id" : "darp_core::@6890427a1f51a3e7e1df",
+					"jsonFile" : "target-darp_core-Release-dd3462c930e279a94b29.json",
+					"name" : "darp_core",
+					"projectIndex" : 0
+				},
+				{
+					"directoryIndex" : 0,
+					"id" : "darp_solver::@6890427a1f51a3e7e1df",
+					"jsonFile" : "target-darp_solver-Release-4bd4531c245482192d83.json",
+					"name" : "darp_solver",
+					"projectIndex" : 0
+				},
+				{
+					"directoryIndex" : 0,
+					"id" : "test_feasibility::@6890427a1f51a3e7e1df",
+					"jsonFile" : "target-test_feasibility-Release-294d096fd00886c1dd7b.json",
+					"name" : "test_feasibility",
+					"projectIndex" : 0
+				},
+				{
+					"directoryIndex" : 0,
+					"id" : "test_initial::@6890427a1f51a3e7e1df",
+					"jsonFile" : "target-test_initial-Release-0079881959bf1f2a473c.json",
+					"name" : "test_initial",
+					"projectIndex" : 0
+				},
+				{
+					"directoryIndex" : 0,
+					"id" : "test_o1_feasibility::@6890427a1f51a3e7e1df",
+					"jsonFile" : "target-test_o1_feasibility-Release-9d3d35d5a08c9d7a177f.json",
+					"name" : "test_o1_feasibility",
+					"projectIndex" : 0
+				},
+				{
+					"directoryIndex" : 0,
+					"id" : "test_parser::@6890427a1f51a3e7e1df",
+					"jsonFile" : "target-test_parser-Release-27f2ea31bed1455f1b05.json",
+					"name" : "test_parser",
+					"projectIndex" : 0
+				},
+				{
+					"directoryIndex" : 0,
+					"id" : "test_solver::@6890427a1f51a3e7e1df",
+					"jsonFile" : "target-test_solver-Release-1b275c3ba183dfedaf90.json",
+					"name" : "test_solver",
+					"projectIndex" : 0
+				}
+			]
+		}
+	],
+	"kind" : "codemodel",
+	"paths" : 
+	{
+		"build" : "/Users/didodimitrov/Documents/thesis-darp/cpp/build",
+		"source" : "/Users/didodimitrov/Documents/thesis-darp/cpp"
+	},
+	"version" : 
+	{
+		"major" : 2,
+		"minor" : 7
+	}
+}
