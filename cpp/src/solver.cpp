@@ -165,6 +165,8 @@ static OperatorRegistry build_registry(
             registry.add_destroy("random", random_removal);
         } else if (name == "worst") {
             registry.add_destroy("worst", worst_removal);
+        } else if (name == "shaw") {
+            registry.add_destroy("shaw", shaw_removal);
         } else {
             std::cerr << "Unknown destroy operator: " << name << "\n";
         }
