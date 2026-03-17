@@ -8,6 +8,7 @@
 #include <cmath>
 #include <iostream>
 #include <random>
+#include <sstream>
 
 static constexpr double EPS = 1e-6;
 
@@ -20,7 +21,6 @@ static DARPSolution repair_ride_times(const DARPSolution& sol, bool verbose) {
     const auto& nodes = inst.nodes;
     const auto& tt = inst.travel_time;
 
-    // Find requests with ride-time or route-duration violations
     std::set<int> to_remove;
     for (const auto& route : sol.routes) {
         auto sched = sol.compute_route_schedule(route);
@@ -48,7 +48,6 @@ static DARPSolution repair_ride_times(const DARPSolution& sol, bool verbose) {
 
     DARPSolution repaired = sol.copy();
 
-    // Remove violating requests
     for (int req : to_remove) {
         int pickup_id = req;
         int delivery_id = req + n;
@@ -66,7 +65,6 @@ static DARPSolution repair_ride_times(const DARPSolution& sol, bool verbose) {
         }
     }
 
-    // Reinsert using full optimizer feasibility check
     std::vector<int> to_reinsert;
     for (int req : to_remove) {
         if (repaired.unassigned.count(req)) {
@@ -79,9 +77,7 @@ static DARPSolution repair_ride_times(const DARPSolution& sol, bool verbose) {
         int pickup_id = req;
         int delivery_id = req + n;
         double best_cost = std::numeric_limits<double>::infinity();
-        int best_k = -1;
-        int best_p = -1;
-        int best_d = -1;
+        int best_k = -1, best_p = -1, best_d = -1;
 
         for (int k = 0; k < static_cast<int>(repaired.routes.size()); k++) {
             const auto& route = repaired.routes[k];
@@ -93,45 +89,30 @@ static DARPSolution repair_ride_times(const DARPSolution& sol, bool verbose) {
                     candidate.insert(candidate.begin() + p_pos, pickup_id);
                     candidate.insert(candidate.begin() + d_pos, delivery_id);
 
-                    // Compute cost delta
                     double new_cost = 0.0;
-                    for (int i = 0; i < static_cast<int>(candidate.size()) - 1; i++) {
+                    for (int i = 0; i < static_cast<int>(candidate.size()) - 1; i++)
                         new_cost += tt[candidate[i]][candidate[i + 1]];
-                    }
                     double old_cost = 0.0;
-                    for (int i = 0; i < rlen - 1; i++) {
+                    for (int i = 0; i < rlen - 1; i++)
                         old_cost += tt[route[i]][route[i + 1]];
-                    }
                     double cost = new_cost - old_cost;
 
                     if (cost >= best_cost) continue;
 
-                    // Full optimizer check
                     auto sched = repaired.compute_route_schedule(candidate);
                     bool ok = true;
                     for (int j = 0; j < static_cast<int>(candidate.size()); j++) {
-                        if (sched.begin_service[j] > nodes[candidate[j]].latest + EPS) {
-                            ok = false;
-                            break;
-                        }
-                        if (sched.load[j] < 0 || sched.load[j] > inst.vehicle_capacity) {
-                            ok = false;
-                            break;
-                        }
+                        if (sched.begin_service[j] > nodes[candidate[j]].latest + EPS) { ok = false; break; }
+                        if (sched.load[j] < 0 || sched.load[j] > inst.vehicle_capacity) { ok = false; break; }
                     }
                     if (ok) {
                         for (const auto& [r, rt] : sched.ride_time) {
-                            if (rt > inst.max_ride_time + EPS) {
-                                ok = false;
-                                break;
-                            }
+                            if (rt > inst.max_ride_time + EPS) { ok = false; break; }
                         }
                     }
                     if (ok) {
                         double rd = sched.begin_service.back() - sched.departure_time[0];
-                        if (rd > inst.max_route_duration + EPS) {
-                            ok = false;
-                        }
+                        if (rd > inst.max_route_duration + EPS) ok = false;
                     }
                     if (ok) {
                         best_cost = cost;
@@ -152,26 +133,69 @@ static DARPSolution repair_ride_times(const DARPSolution& sol, bool verbose) {
         }
     }
 
-    if (verbose) {
-        std::set<int> still;
-        for (int req : to_remove) {
-            if (repaired.unassigned.count(req)) {
-                still.insert(req);
-            }
-        }
-        if (!still.empty()) {
-            std::cout << "  Could not reinsert: {";
-            bool first = true;
-            for (int r : still) {
-                if (!first) std::cout << ", ";
-                std::cout << r;
-                first = false;
-            }
-            std::cout << "}\n";
+    return repaired;
+}
+
+// ---------------------------------------------------------------------------
+// Helper: parse comma-separated operator names
+// ---------------------------------------------------------------------------
+static std::vector<std::string> parse_operator_list(const std::string& s) {
+    std::vector<std::string> result;
+    std::istringstream iss(s);
+    std::string token;
+    while (std::getline(iss, token, ',')) {
+        if (!token.empty()) result.push_back(token);
+    }
+    return result;
+}
+
+// ---------------------------------------------------------------------------
+// Build operator registry from config strings
+// ---------------------------------------------------------------------------
+static OperatorRegistry build_registry(
+    const std::string& destroy_config,
+    const std::string& repair_config,
+    const std::string& selection_config) {
+
+    OperatorRegistry registry;
+
+    auto destroy_names = parse_operator_list(destroy_config);
+    for (const auto& name : destroy_names) {
+        if (name == "random") {
+            registry.add_destroy("random", random_removal);
+        } else if (name == "worst") {
+            registry.add_destroy("worst", worst_removal);
+        } else {
+            std::cerr << "Unknown destroy operator: " << name << "\n";
         }
     }
 
-    return repaired;
+    auto repair_names = parse_operator_list(repair_config);
+    for (const auto& name : repair_names) {
+        if (name == "greedy") {
+            registry.add_repair("greedy", greedy_insertion);
+        } else {
+            std::cerr << "Unknown repair operator: " << name << "\n";
+        }
+    }
+
+    // Fallback defaults
+    if (registry.num_destroy() == 0) {
+        registry.add_destroy("random", random_removal);
+    }
+    if (registry.num_repair() == 0) {
+        registry.add_repair("greedy", greedy_insertion);
+    }
+
+    if (selection_config == "random") {
+        registry.set_selection_method(SelectionMethod::RANDOM);
+    } else if (selection_config == "roulette") {
+        registry.set_selection_method(SelectionMethod::ROULETTE_WHEEL);
+    } else {
+        registry.set_selection_method(SelectionMethod::RANDOM);
+    }
+
+    return registry;
 }
 
 // ---------------------------------------------------------------------------
@@ -184,11 +208,31 @@ SolverResult solve(
     double end_temperature,
     int seed,
     bool verbose,
-    const std::string& feasibility_mode) {
+    const std::string& feasibility_mode,
+    const std::string& destroy_config,
+    const std::string& repair_config,
+    const std::string& selection_config) {
 
     using Clock = std::chrono::high_resolution_clock;
 
     std::mt19937 rng(seed);
+
+    // Build operator registry
+    OperatorRegistry registry = build_registry(destroy_config, repair_config, selection_config);
+
+    if (verbose) {
+        std::cout << "Operators: destroy=[";
+        for (int i = 0; i < registry.num_destroy(); i++) {
+            if (i > 0) std::cout << ",";
+            std::cout << registry.destroy_name(i);
+        }
+        std::cout << "] repair=[";
+        for (int i = 0; i < registry.num_repair(); i++) {
+            if (i > 0) std::cout << ",";
+            std::cout << registry.repair_name(i);
+        }
+        std::cout << "] selection=" << selection_config << "\n";
+    }
 
     // Build initial solution
     auto t0 = Clock::now();
@@ -202,7 +246,6 @@ SolverResult solve(
                   << " (" << construction_time << "s)\n";
     }
 
-    // Switch feasibility mode for ALNS (initial always uses slack)
     if (feasibility_mode != "slack") {
         init_sol.feasibility_mode = feasibility_mode;
     }
@@ -212,20 +255,30 @@ SolverResult solve(
                               1.0 / max_iterations);
     double temperature = start_temperature;
 
-    // Track best
     DARPSolution best = init_sol.copy();
     double best_obj = best.objective();
     DARPSolution current = init_sol.copy();
     double current_obj = current.objective();
 
+    // Operator usage stats
+    std::vector<int> destroy_count(registry.num_destroy(), 0);
+    std::vector<int> repair_count(registry.num_repair(), 0);
+    std::vector<int> destroy_improve(registry.num_destroy(), 0);
+    std::vector<int> repair_improve(registry.num_repair(), 0);
+
     auto solve_t0 = Clock::now();
 
     for (int iter = 0; iter < max_iterations; iter++) {
-        // Destroy
-        DARPSolution destroyed = random_removal(current, rng);
+        // Select operators
+        auto [d_idx, destroy] = registry.select_destroy(rng);
+        auto [r_idx, repair] = registry.select_repair(rng);
 
-        // Repair
-        DARPSolution candidate = greedy_insertion(destroyed, rng);
+        destroy_count[d_idx]++;
+        repair_count[r_idx]++;
+
+        // Destroy + Repair
+        DARPSolution destroyed = destroy(current, rng);
+        DARPSolution candidate = repair(destroyed, rng);
         double candidate_obj = candidate.objective();
 
         // SA acceptance
@@ -240,6 +293,16 @@ SolverResult solve(
             }
         }
 
+        // Score for weight update
+        double score = 0.0;
+        if (candidate_obj < best_obj - EPS) {
+            score = 20.0;  // new global best
+        } else if (delta < -EPS) {
+            score = 10.0;  // improving
+        } else if (accept) {
+            score = 5.0;   // accepted worse
+        }
+
         if (accept) {
             current = std::move(candidate);
             current_obj = current.objective();
@@ -248,11 +311,14 @@ SolverResult solve(
         if (current_obj < best_obj - EPS) {
             best = current.copy();
             best_obj = current_obj;
+            destroy_improve[d_idx]++;
+            repair_improve[r_idx]++;
         }
 
+        registry.update_weights(d_idx, r_idx, score);
         temperature *= sa_step;
 
-        if (verbose && (iter + 1) % 10 == 0) {
+        if (verbose && (iter + 1) % 100 == 0) {
             std::cout << "  iter " << (iter + 1)
                       << ": current=" << current_obj
                       << ", best=" << best_obj
@@ -266,9 +332,34 @@ SolverResult solve(
     if (verbose) {
         std::cout << "Best solution:    obj=" << best.objective()
                   << " (" << solve_time << "s)\n";
+
+        // Print operator stats
+        std::cout << "Operator stats:\n";
+        for (int i = 0; i < registry.num_destroy(); i++) {
+            std::cout << "  destroy/" << registry.destroy_name(i)
+                      << ": used=" << destroy_count[i]
+                      << ", improved=" << destroy_improve[i] << "\n";
+        }
+        for (int i = 0; i < registry.num_repair(); i++) {
+            std::cout << "  repair/" << registry.repair_name(i)
+                      << ": used=" << repair_count[i]
+                      << ", improved=" << repair_improve[i] << "\n";
+        }
+
+        // Print final weights (for roulette wheel)
+        if (registry.get_selection_method() == SelectionMethod::ROULETTE_WHEEL) {
+            std::cout << "Final weights:\n";
+            for (int i = 0; i < registry.num_destroy(); i++) {
+                std::cout << "  destroy/" << registry.destroy_name(i)
+                          << ": weight=" << registry.get_destroy_weights()[i] << "\n";
+            }
+            for (int i = 0; i < registry.num_repair(); i++) {
+                std::cout << "  repair/" << registry.repair_name(i)
+                          << ": weight=" << registry.get_repair_weights()[i] << "\n";
+            }
+        }
     }
 
-    // Post-ALNS feasibility repair (skip if mode=full, already exact)
     DARPSolution repaired = (feasibility_mode == "full")
         ? best.copy()
         : repair_ride_times(best, verbose);

@@ -7,8 +7,18 @@
 
 static void print_usage(const char* prog) {
     std::cerr << "Usage: " << prog
-              << " --instance <path> [--iterations N] [--seed S]"
-              << " [--feasibility slack|full|o1]\n";
+              << " --instance <path> [options]\n"
+              << "\nOptions:\n"
+              << "  --iterations N       Number of ALNS iterations (default: 1000)\n"
+              << "  --seed S             Random seed (default: 42)\n"
+              << "  --feasibility MODE   Feasibility check: slack, full, o1 (default: slack)\n"
+              << "  --destroy OPS        Comma-separated destroy operators (default: random,worst)\n"
+              << "                       Available: random, worst\n"
+              << "  --repair OPS         Comma-separated repair operators (default: greedy)\n"
+              << "                       Available: greedy\n"
+              << "  --selection METHOD   Operator selection: random, roulette (default: random)\n"
+              << "  --sa-start TEMP      SA start temperature (default: 100)\n"
+              << "  --sa-end TEMP        SA end temperature (default: 0.01)\n";
 }
 
 int main(int argc, char* argv[]) {
@@ -16,6 +26,11 @@ int main(int argc, char* argv[]) {
     int iterations = 1000;
     int seed = 42;
     std::string feasibility_mode = "slack";
+    std::string destroy_config = "random,worst";
+    std::string repair_config = "greedy";
+    std::string selection_config = "random";
+    double sa_start = 100.0;
+    double sa_end = 0.01;
 
     for (int i = 1; i < argc; i++) {
         std::string arg = argv[i];
@@ -29,9 +44,19 @@ int main(int argc, char* argv[]) {
             feasibility_mode = argv[++i];
             if (feasibility_mode != "slack" && feasibility_mode != "full" && feasibility_mode != "o1") {
                 std::cerr << "Unknown feasibility mode: " << feasibility_mode
-                          << " (valid: slack, full)\n";
+                          << " (valid: slack, full, o1)\n";
                 return 1;
             }
+        } else if (arg == "--destroy" && i + 1 < argc) {
+            destroy_config = argv[++i];
+        } else if (arg == "--repair" && i + 1 < argc) {
+            repair_config = argv[++i];
+        } else if (arg == "--selection" && i + 1 < argc) {
+            selection_config = argv[++i];
+        } else if (arg == "--sa-start" && i + 1 < argc) {
+            sa_start = std::stod(argv[++i]);
+        } else if (arg == "--sa-end" && i + 1 < argc) {
+            sa_end = std::stod(argv[++i]);
         } else if (arg == "--help" || arg == "-h") {
             print_usage(argv[0]);
             return 0;
@@ -52,7 +77,9 @@ int main(int argc, char* argv[]) {
               << ", T=" << inst.max_route_duration << "\n";
 
     std::cout << "Feasibility mode: " << feasibility_mode << "\n";
-    SolverResult result = solve(inst, iterations, 100.0, 0.01, seed, true, feasibility_mode);
+    SolverResult result = solve(inst, iterations, sa_start, sa_end, seed, true,
+                                feasibility_mode, destroy_config, repair_config,
+                                selection_config);
 
     std::cout << "\nFinal objective: " << result.best.objective() << "\n";
     std::cout << "Travel cost:     " << result.best.travel_cost() << "\n";

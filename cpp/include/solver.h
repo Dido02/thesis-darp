@@ -2,7 +2,6 @@
 
 #include "instance.h"
 #include "solution.h"
-
 #include <string>
 
 struct SolverResult {
@@ -19,4 +18,7 @@ SolverResult solve(
     double end_temperature = 0.01,
     int seed = 42,
     bool verbose = true,
-    const std::string& feasibility_mode = "slack");
+    const std::string& feasibility_mode = "o1",
+    const std::string& destroy_config = "random",
+    const std::string& repair_config = "greedy",
+    const std::string& selection_config = "random");
