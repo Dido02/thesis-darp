@@ -170,6 +170,9 @@ static bool test_exhaustive_correctness(const DARPInstance& inst,
             for (int p_pos = 1; p_pos < rlen; p_pos++) {
                 for (int d_pos = p_pos; d_pos < rlen; d_pos++) {
                     // Build candidate route
+
+                    auto [reduced_ok, reduced_reason] = check_alap_feasible(reduced, inst);
+                    if (!reduced_ok) continue;
                     std::vector<int> candidate = reduced;
                     candidate.insert(candidate.begin() + p_pos, pickup_id);
                     candidate.insert(candidate.begin() + d_pos + 1, delivery_id);
@@ -197,8 +200,16 @@ static bool test_exhaustive_correctness(const DARPInstance& inst,
                         ok = false;
                     } else {
                         false_negatives++;
-                        // False negatives are conservative (safe) — report but don't fail
-                        // Actually, for correctness we want exact match
+                        if (false_negatives <= 5) {
+                            std::cerr << "  FALSE NEGATIVE: route " << k
+                                      << ", req " << req
+                                      << ", k=" << p_pos << ", l=" << d_pos
+                                      << "\n    reduced route:";
+                            for (int nid : reduced) std::cerr << " " << nid;
+                            std::cerr << "\n    candidate:";
+                            for (int nid : candidate) std::cerr << " " << nid;
+                            std::cerr << "\n";
+                        }
                     }
                 }
             }
@@ -213,20 +224,19 @@ static bool test_exhaustive_correctness(const DARPInstance& inst,
         ? 100.0 * agreements / total_checks : 0.0;
     std::cout << "  Agreement rate: " << agreement_rate << "%\n";
 
-    // False positives are bugs (accepting infeasible insertions).
-    // False negatives are conservative — not ideal but safe.
     if (false_positives > 0) {
         std::cerr << "  FAILED: " << false_positives << " false positives!\n";
         ok = false;
     }
 
-    // Report false negative rate
     if (false_negatives > 0) {
         double fn_rate = 100.0 * false_negatives / total_checks;
-        std::cout << "  False negative rate: " << fn_rate << "% (conservative, safe)\n";
+        std::cerr << "  FAILED: " << false_negatives << " false negatives ("
+                  << fn_rate << "%)\n";
+        ok = false;
     }
 
-    std::cout << (ok ? "  PASSED (no false positives)" : "  FAILED") << "\n";
+    std::cout << (ok ? "  PASSED (exact match)" : "  FAILED") << "\n";
     return ok;
 }
 

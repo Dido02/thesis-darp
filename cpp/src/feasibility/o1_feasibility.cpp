@@ -7,7 +7,7 @@
 static constexpr double EPS = 1e-6;
 
 // ---------------------------------------------------------------------------
-// compute_aeap — Steps 1+2 only (forward pass + depot delay).
+// compute_aeap — Steps 1+2 (forward pass + depot delay by forward time slack).
 // No Step 3 per-pickup delays. The ALAP handles ride-time constraints.
 // ---------------------------------------------------------------------------
 void compute_aeap(const std::vector<int>& route, const DARPInstance& inst,
@@ -284,16 +284,15 @@ static inline double tau_bar_at2(const RouteAuxData& aux, int i,
 }
 
 // ---------------------------------------------------------------------------
-// check_insertion_o1 — O(1) feasibility check
+// check_insertion_o1 — O(1) feasibility check following Algorithms 2 & 3
+// from Gschwind & Drexl (2016).
 //
+// Inserts pickup of request req before position k, delivery before position l.
 // New route: route[0..k-1], pickup, route[k..l-1], delivery, route[l..end]
-// k >= 1, l >= k, l <= size-1
 //
-// The tau_bar checks at positions k and l implicitly cover:
-// - Time windows at all affected positions
-// - Ride times of all existing requests
-// - Route duration
-// We only explicitly check: capacity, new request TWs, new request ride time.
+// Paper is 1-indexed (v1..vr), pickup inserted after vk. Our code is
+// 0-indexed, pickup inserted before position k. So:
+//   Paper's vk = route[k-1], vk+1 = route[k], tau_k = aux.tau[k-1], etc.
 // ---------------------------------------------------------------------------
 bool check_insertion_o1(const RouteAuxData& aux, int req, int k, int l,
                         const DARPInstance& inst) {
@@ -307,88 +306,153 @@ bool check_insertion_o1(const RouteAuxData& aux, int req, int k, int l,
     int delivery_id = req + n;
     const auto& pn = nodes[pickup_id];
     const auto& dn = nodes[delivery_id];
+    double s_p = pn.service_duration;
+    double s_d = dn.service_duration;
 
-    // --- Capacity ---
+    // --- Capacity check ---
     if (k <= l - 1) {
         if (aux.max_load[k][l - 1] + 1 > Q) return false;
     }
 
-    // === Consecutive case: k == l ===
+    // ===================================================================
+    // Consecutive case: k == l
+    // route[0..k-1], pickup, delivery, route[k..end]
+    // Simplified Algorithm 2 with delivery between lines 2 and 3.
+    // ===================================================================
     if (k == l) {
-        double tau_p = std::max(pn.earliest, aux.depart[k - 1] + tt[route[k - 1]][pickup_id]);
+        // Line 1: earliest service at pickup
+        double tau_p = std::max(pn.earliest,
+                                aux.depart[k - 1] + tt[route[k - 1]][pickup_id]);
+        // Line 2: TW check
         if (tau_p > pn.latest + EPS) return false;
 
-        double dep_p = tau_p + pn.service_duration;
+        double dep_p = tau_p + s_p;
         double tau_d = std::max(dn.earliest, dep_p + tt[pickup_id][delivery_id]);
         if (tau_d > dn.latest + EPS) return false;
 
         double ride = tau_d - dep_p;
         if (ride > inst.max_ride_time + EPS) return false;
 
-        double dep_d = tau_d + dn.service_duration;
-        double tau_k = std::max(aux.tau[k], dep_d + tt[delivery_id][route[k]]);
+        // Line 3: earliest service at successor route[k]
+        double dep_d = tau_d + s_d;
+        double tau_k_new = std::max(static_cast<double>(aux.tau[k]),
+                                     dep_d + tt[delivery_id][route[k]]);
 
-        if (tau_k > tau_bar_at(aux, k, aux.tau[k - 1], k - 1) + EPS) return false;
+        // Lines 4-5: backward maximization
+        double max_tau_d = std::min(dn.latest,
+                                     tau_k_new - tt[delivery_id][route[k]] - s_d);
+        double max_tau_p = std::min(pn.latest,
+                                     max_tau_d - tt[pickup_id][delivery_id] - s_p);
+        double max_tau_km1 = std::min(aux.tau_bar[k - 1],
+                                       max_tau_p - tt[route[k - 1]][pickup_id]
+                                       - nodes[route[k - 1]].service_duration);
+
+        // Line 6: bound check
+        if (tau_k_new > tau_bar_at(aux, k, max_tau_km1, k - 1) + EPS) return false;
+
         return true;
     }
 
-    // === General case: k < l ===
+    // ===================================================================
+    // General case: k < l
+    // Phase 1: Algorithm 2 — pickup insertion
+    // Phase 2: Algorithm 3 — delivery insertion
+    // ===================================================================
 
-    // --- Pickup insertion (before position k) ---
-    double tau_p = std::max(pn.earliest, aux.depart[k - 1] + tt[route[k - 1]][pickup_id]);
+    // --- Phase 1: Algorithm 2 ---
+
+    // Line 1: earliest service at pickup
+    double tau_p = std::max(pn.earliest,
+                            aux.depart[k - 1] + tt[route[k - 1]][pickup_id]);
+    // Line 2: TW check
     if (tau_p > pn.latest + EPS) return false;
 
-    double dep_p = tau_p + pn.service_duration;
-    double tau_k = std::max(aux.tau[k], dep_p + tt[pickup_id][route[k]]);
+    // Line 3: earliest service at successor route[k]
+    double dep_p = tau_p + s_p;
+    double tau_k_new = std::max(static_cast<double>(aux.tau[k]),
+                                 dep_p + tt[pickup_id][route[k]]);
 
-    double tb_k = tau_bar_at(aux, k, aux.tau[k - 1], k - 1);
-    if (tau_k > tb_k + EPS) return false;
+    // Line 4: maximize pickup time given tau_k_new
+    double max_tau_p = std::min(pn.latest,
+                                 tau_k_new - tt[pickup_id][route[k]] - s_p);
 
-    // --- Propagate delay from k to l-1 ---
-    double delay_k = tau_k - aux.tau[k];
+    // Line 5: maximize vk time given max_tau_p
+    double max_tau_km1 = std::min(aux.tau_bar[k - 1],
+                                   max_tau_p - tt[route[k - 1]][pickup_id]
+                                   - nodes[route[k - 1]].service_duration);
+
+    // Line 6: bound check at route[k]
+    double tb_k = tau_bar_at(aux, k, max_tau_km1, k - 1);
+    if (tau_k_new > tb_k + EPS) return false;
+
+    // --- Phase 2: Algorithm 3 ---
+
+    // Line 1: propagate delay from route[k] to route[l-1]
+    double delay_k = tau_k_new - aux.tau[k];
 
     double tau_lm1;
     if (k == l - 1) {
-        tau_lm1 = tau_k;
+        tau_lm1 = tau_k_new;
     } else {
         tau_lm1 = aux.tau[l - 1] + std::max(0.0, delay_k - aux.wait[k][l - 1]);
     }
     double dep_lm1 = tau_lm1 + nodes[route[l - 1]].service_duration;
 
-    // --- Delivery insertion (before position l) ---
+    // Line 2: earliest service at delivery
     double tau_d = std::max(dn.earliest, dep_lm1 + tt[route[l - 1]][delivery_id]);
+    // Line 3: TW check
     if (tau_d > dn.latest + EPS) return false;
 
-    double dep_d = tau_d + dn.service_duration;
-
-    // Shifted time at position l (from pickup delay only)
+    // Line 4: earliest service at successor route[l]
+    double dep_d = tau_d + s_d;
     double tau_l_shifted = aux.tau[l] + std::max(0.0, delay_k - aux.wait[k][l]);
-    // After delivery insertion
-    double tau_l = std::max(tau_l_shifted, dep_d + tt[delivery_id][route[l]]);
+    double tau_l_new = std::max(tau_l_shifted, dep_d + tt[delivery_id][route[l]]);
 
-    double tb_l = tau_bar_at2(aux, l, aux.tau[k - 1], k - 1, tau_lm1, l - 1);
-    if (tau_l > tb_l + EPS) return false;
+    // Line 5: maximize tau at route[l-1]
+    double max_tau_lm1 = std::min(
+        tau_bar_at(aux, l - 1, max_tau_km1, k - 1),
+        tau_d - tt[route[l - 1]][delivery_id] - nodes[route[l - 1]].service_duration);
 
-    // --- New request ride time ---
-    double ride = tau_d - dep_p;
-    if (ride > inst.max_ride_time + EPS) {
-        // Repair: delay pickup to reduce ride time
-        double needed_dep_p = tau_d - inst.max_ride_time;
-        double needed_tau_p = needed_dep_p - pn.service_duration;
-        if (needed_tau_p > pn.latest + EPS) return false;
-        if (needed_tau_p <= tau_p + EPS) return false;  // can't improve
+    // Line 6: bound check at route[l]
+    double tb_l = tau_bar_at2(aux, l, max_tau_km1, k - 1, max_tau_lm1, l - 1);
+    double delta_l = tau_l_new - tb_l;
 
-        tau_p = needed_tau_p;
-        dep_p = tau_p + pn.service_duration;
-
-        // Recheck pickup -> position k
-        tau_k = std::max(aux.tau[k], dep_p + tt[pickup_id][route[k]]);
-        if (tau_k > tb_k + EPS) return false;
-
-        // Recompute delay propagation
-        delay_k = tau_k - aux.tau[k];
+    // Lines 7-14: delta_l repair
+    if (delta_l > EPS) {
+        // Line 8: check repair feasibility
+        double w_to_delivery;
         if (k == l - 1) {
-            tau_lm1 = tau_k;
+            // k+1 == l: waiting between pickup and delivery (w_{i+, i-})
+            w_to_delivery = tau_d - (dep_lm1 + tt[route[l - 1]][delivery_id]);
+        } else {
+            double wait_k_to_lm1 = aux.wait[k][l - 1];
+            double wait_at_d = tau_d - (dep_lm1 + tt[route[l - 1]][delivery_id]);
+            w_to_delivery = std::max(0.0, wait_k_to_lm1 - delay_k) + std::max(0.0, wait_at_d);
+        }
+
+        if (max_tau_km1 + delta_l > aux.tau_bar[k - 1] + EPS) return false;
+        if (max_tau_p + delta_l > pn.latest + EPS) return false;
+        if (delta_l > w_to_delivery + EPS) return false;
+
+        // Lines 9-11: increase service times
+        max_tau_km1 += delta_l;
+        max_tau_p += delta_l;
+        tau_k_new += delta_l;
+
+        // Line 12: re-check at route[k]
+        // For k+1 == l: use max instead of simple addition (paper page 10)
+        if (k == l - 1) {
+            tau_k_new = std::max(tau_k_new,
+                                  max_tau_p + s_p + tt[pickup_id][route[k]]);
+        }
+
+        tb_k = tau_bar_at(aux, k, max_tau_km1, k - 1);
+        if (tau_k_new > tb_k + EPS) return false;
+
+        // Line 13: recompute with new times
+        delay_k = tau_k_new - aux.tau[k];
+        if (k == l - 1) {
+            tau_lm1 = tau_k_new;
         } else {
             tau_lm1 = aux.tau[l - 1] + std::max(0.0, delay_k - aux.wait[k][l - 1]);
         }
@@ -396,16 +460,62 @@ bool check_insertion_o1(const RouteAuxData& aux, int req, int k, int l,
 
         tau_d = std::max(dn.earliest, dep_lm1 + tt[route[l - 1]][delivery_id]);
         if (tau_d > dn.latest + EPS) return false;
-        dep_d = tau_d + dn.service_duration;
+        dep_d = tau_d + s_d;
 
+        max_tau_lm1 = std::min(
+            tau_bar_at(aux, l - 1, max_tau_km1, k - 1),
+            tau_d - tt[route[l - 1]][delivery_id] - nodes[route[l - 1]].service_duration);
+
+        // Line 14: re-check at route[l]
         tau_l_shifted = aux.tau[l] + std::max(0.0, delay_k - aux.wait[k][l]);
-        tau_l = std::max(tau_l_shifted, dep_d + tt[delivery_id][route[l]]);
+        tau_l_new = std::max(tau_l_shifted, dep_d + tt[delivery_id][route[l]]);
 
-        tb_l = tau_bar_at2(aux, l, aux.tau[k - 1], k - 1, tau_lm1, l - 1);
-        if (tau_l > tb_l + EPS) return false;
+        tb_l = tau_bar_at2(aux, l, max_tau_km1, k - 1, max_tau_lm1, l - 1);
+        if (tau_l_new > tb_l + EPS) return false;
+    }
 
-        ride = tau_d - dep_p;
-        if (ride > inst.max_ride_time + EPS) return false;
+    // --- Lines 15-21: ride-time check and repair ---
+    double ride = tau_d - (tau_p + s_p);
+
+    if (ride > inst.max_ride_time + EPS) {
+        // Line 16: needed delay
+        double delta_i = ride - inst.max_ride_time;
+
+        // Line 17: check repair feasibility
+        if (tau_p + delta_i > pn.latest + EPS) return false;
+
+        double w_check;
+        if (k == l - 1) {
+            // k+1 == l: waiting between i+ and i-
+            w_check = tau_d - (tau_p + s_p + tt[pickup_id][route[k]]
+                      + nodes[route[k]].service_duration + tt[route[l - 1]][delivery_id]);
+            w_check = std::max(0.0, w_check);
+        } else {
+            double residual_wait = std::max(0.0, aux.wait[k][l - 1] - delay_k);
+            double wait_at_d = std::max(0.0, tau_d - (dep_lm1 + tt[route[l - 1]][delivery_id]));
+            w_check = residual_wait + wait_at_d;
+        }
+        if (delta_i > w_check + EPS) return false;
+
+        // Line 18: increase pickup time
+        tau_p += delta_i;
+
+        // Line 19: increase tau_k_new
+        tau_k_new += delta_i;
+        // For k+1 == l: use max (paper page 10)
+        if (k == l - 1) {
+            tau_k_new = std::max(tau_k_new,
+                                  tau_p + s_p + tt[pickup_id][route[k]]);
+        }
+
+        // Line 20: maximize vk given new pickup time
+        max_tau_km1 = std::min(aux.tau_bar[k - 1],
+                                tau_p - tt[route[k - 1]][pickup_id]
+                                - nodes[route[k - 1]].service_duration);
+
+        // Line 21: re-check at route[k]
+        tb_k = tau_bar_at(aux, k, max_tau_km1, k - 1);
+        if (tau_k_new > tb_k + EPS) return false;
     }
 
     return true;
@@ -455,17 +565,88 @@ std::pair<bool, std::string> check_alap_feasible(
         }
     }
 
-    // ALAP
+    // ALAP (compute_alap clamps tau_bar[i] >= tau[i] for interpolation use,
+    // but we need the unclamped values to detect infeasibility).
     std::vector<double> tau_bar;
     compute_alap(route, inst, tau, depart, tau_bar);
 
-    // Check tau[i] <= tau_bar[i] (a feasible schedule exists)
+    // tau_bar was clamped, so undo the clamp to get the true ALAP values.
+    // If the unclamped tau_bar[i] < tau[i], the route is infeasible.
+    // We re-run the backward pass + tightening without clamping.
+    // (Alternatively we could split compute_alap, but this is simpler
+    // and check_alap_feasible is only used for ground-truth validation.)
+    std::vector<double> tau_bar_raw(size);
+
+    // Initialize from time window upper bounds
+    tau_bar_raw[size - 1] = nodes[route[size - 1]].latest;
+    for (int i = size - 2; i >= 0; i--) {
+        double limit = tau_bar_raw[i + 1] - inst.travel_time[route[i]][route[i + 1]]
+                       - nodes[route[i]].service_duration;
+        tau_bar_raw[i] = std::min(nodes[route[i]].latest, limit);
+    }
+
+    // Build pickup/delivery maps for ride-time tightening
+    std::unordered_map<int, int> pickup_pos2, delivery_pos2;
     for (int i = 0; i < size; i++) {
-        if (tau[i] > tau_bar[i] + EPS) {
+        int nid = route[i];
+        if (nid >= 1 && nid <= n) pickup_pos2[nid] = i;
+        else if (nid >= n + 1 && nid <= 2 * n) delivery_pos2[nid - n] = i;
+    }
+
+    // Iterative tightening (same as compute_alap but without final clamp)
+    for (int iter = 0; iter < size + 2; iter++) {
+        bool changed = false;
+
+        // Backward pass
+        for (int i = size - 2; i >= 0; i--) {
+            double limit = tau_bar_raw[i + 1] - inst.travel_time[route[i]][route[i + 1]]
+                           - nodes[route[i]].service_duration;
+            double new_val = std::min(tau_bar_raw[i], limit);
+            if (new_val < tau_bar_raw[i] - EPS) {
+                tau_bar_raw[i] = new_val;
+                changed = true;
+            }
+        }
+
+        // Ride-time tightening
+        for (auto& [req, p] : pickup_pos2) {
+            auto dit = delivery_pos2.find(req);
+            if (dit == delivery_pos2.end()) continue;
+            int d = dit->second;
+            double s_p = nodes[route[p]].service_duration;
+            double ride = tau_bar_raw[d] - (tau_bar_raw[p] + s_p);
+            if (ride > inst.max_ride_time + EPS) {
+                double new_tb = tau_bar_raw[p] + s_p + inst.max_ride_time;
+                if (new_tb < tau_bar_raw[d] - EPS) {
+                    tau_bar_raw[d] = new_tb;
+                    changed = true;
+                }
+            }
+        }
+
+        // Route duration tightening
+        {
+            double s0 = nodes[route[0]].service_duration;
+            double dur = tau_bar_raw[size - 1] - (tau_bar_raw[0] + s0);
+            if (dur > inst.max_route_duration + EPS) {
+                double new_end = tau_bar_raw[0] + s0 + inst.max_route_duration;
+                if (new_end < tau_bar_raw[size - 1] - EPS) {
+                    tau_bar_raw[size - 1] = new_end;
+                    changed = true;
+                }
+            }
+        }
+
+        if (!changed) break;
+    }
+
+    // Check tau[i] <= tau_bar_raw[i] (unclamped — detects true infeasibility)
+    for (int i = 0; i < size; i++) {
+        if (tau[i] > tau_bar_raw[i] + EPS) {
             return {false, "ALAP infeasible at pos " + std::to_string(i) +
                     " node " + std::to_string(route[i]) +
                     ": tau=" + std::to_string(tau[i]) +
-                    " > tau_bar=" + std::to_string(tau_bar[i])};
+                    " > tau_bar=" + std::to_string(tau_bar_raw[i])};
         }
     }
 
