@@ -169,8 +169,8 @@ static OperatorRegistry build_registry(
             registry.add_destroy("shaw", shaw_removal);
         } else if (name == "rtcritical") {
             registry.add_destroy("rtcritical", ride_time_critical_removal);
-        // } else if (name == "lowslack") {
-        //     registry.add_destroy("lowslack", low_slack_route_removal);
+        } else if (name == "lowslack") {
+            registry.add_destroy("lowslack", low_slack_route_removal);
         } else {
             std::cerr << "Unknown destroy operator: " << name << "\n";
         }
