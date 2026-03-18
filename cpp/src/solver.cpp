@@ -176,6 +176,10 @@ static OperatorRegistry build_registry(
     for (const auto& name : repair_names) {
         if (name == "greedy") {
             registry.add_repair("greedy", greedy_insertion);
+        } else if (name == "regret2") {
+            registry.add_repair("regret2", regret2_insertion);
+        } else if (name == "regret3") {
+            registry.add_repair("regret3", regret3_insertion);
         } else {
             std::cerr << "Unknown repair operator: " << name << "\n";
         }
