@@ -18,7 +18,8 @@ static void print_usage(const char* prog) {
               << "                       Available: greedy\n"
               << "  --selection METHOD   Operator selection: random, roulette (default: random)\n"
               << "  --sa-start TEMP      SA start temperature (default: 100)\n"
-              << "  --sa-end TEMP        SA end temperature (default: 0.01)\n";
+              << "  --sa-end TEMP        SA end temperature (default: 0.01)\n"
+              << "  --time-limit SECS    Stop after this many seconds (default: 0 = use iterations)\n";
 }
 
 int main(int argc, char* argv[]) {
@@ -27,8 +28,9 @@ int main(int argc, char* argv[]) {
     int seed = 42;
     std::string feasibility_mode = "o1";
     std::string destroy_config = "random,worst,shaw,rtcritical,lowslack";
-    std::string repair_config = "greedy,regret2,regret3";
+    std::string repair_config = "greedy,regret2,regret3,slack";
     std::string selection_config = "roulette";
+    double time_limit = 0.0;
     double sa_start = 100.0;
     double sa_end = 0.01;
 
@@ -57,6 +59,8 @@ int main(int argc, char* argv[]) {
             sa_start = std::stod(argv[++i]);
         } else if (arg == "--sa-end" && i + 1 < argc) {
             sa_end = std::stod(argv[++i]);
+        } else if (arg == "--time-limit" && i + 1 < argc) {
+            time_limit = std::stod(argv[++i]);
         } else if (arg == "--help" || arg == "-h") {
             print_usage(argv[0]);
             return 0;
@@ -79,7 +83,7 @@ int main(int argc, char* argv[]) {
     std::cout << "Feasibility mode: " << feasibility_mode << "\n";
     SolverResult result = solve(inst, iterations, sa_start, sa_end, seed, true,
                                 feasibility_mode, destroy_config, repair_config,
-                                selection_config);
+                                selection_config, time_limit);
 
     std::cout << "\nFinal objective: " << result.best.objective() << "\n";
     std::cout << "Travel cost:     " << result.best.travel_cost() << "\n";

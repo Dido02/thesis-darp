@@ -184,8 +184,8 @@ static OperatorRegistry build_registry(
             registry.add_repair("regret2", regret2_insertion);
         } else if (name == "regret3") {
             registry.add_repair("regret3", regret3_insertion);
-        // } else if (name == "slack") {
-        //     registry.add_repair("slack", slack_insertion);
+        } else if (name == "slack") {
+            registry.add_repair("slack", slack_insertion);
         } else {
             std::cerr << "Unknown repair operator: " << name << "\n";
         }
@@ -223,7 +223,8 @@ SolverResult solve(
     const std::string& feasibility_mode,
     const std::string& destroy_config,
     const std::string& repair_config,
-    const std::string& selection_config) {
+    const std::string& selection_config,
+    double time_limit) {
 
     using Clock = std::chrono::high_resolution_clock;
 
@@ -263,9 +264,18 @@ SolverResult solve(
     }
 
     // SA parameters
-    double sa_step = std::pow(end_temperature / start_temperature,
-                              1.0 / max_iterations);
+    // double sa_step = std::pow(end_temperature / start_temperature,
+    //                           1.0 / max_iterations);
+    // double temperature = start_temperature;
+
     double temperature = start_temperature;
+    double sa_step;
+    if (time_limit > 0.0) {
+        sa_step = 1.0;  // no cooling until calibrated
+    } else {
+        sa_step = std::pow(end_temperature / start_temperature,
+                          1.0 / max_iterations);
+    }
 
     DARPSolution best = init_sol.copy();
     double best_obj = best.objective();
@@ -279,8 +289,37 @@ SolverResult solve(
     std::vector<int> repair_improve(registry.num_repair(), 0);
 
     auto solve_t0 = Clock::now();
+    bool sa_calibrated = false;
 
     for (int iter = 0; iter < max_iterations; iter++) {
+
+        if (time_limit > 0.0) {
+            auto now = Clock::now();
+            double elapsed = std::chrono::duration<double>(now - solve_t0).count();
+            if (elapsed >= time_limit) {
+                if (verbose) {
+                    std::cout << "  Time limit reached at iter " << iter
+                              << " (" << elapsed << "s)\n";
+                }
+                break;
+            }
+
+            // Calibrate cooling after 50 warm-up iterations
+            if (!sa_calibrated && iter == 10 && elapsed > 0.0) {
+                double iters_per_sec = 10.0 / elapsed;
+                int estimated_total = static_cast<int>(iters_per_sec * time_limit);
+                estimated_total = std::max(estimated_total, 100);
+                sa_step = std::pow(end_temperature / start_temperature,
+                                  1.0 / estimated_total);
+                temperature = start_temperature;
+                sa_calibrated = true;
+                if (verbose) {
+                    std::cout << "  SA calibrated: ~" << iters_per_sec
+                              << " iter/s, estimated " << estimated_total
+                              << " total, step=" << sa_step << "\n";
+                }
+            }
+        }
         // Select operators
         auto [d_idx, destroy] = registry.select_destroy(rng);
         auto [r_idx, repair] = registry.select_repair(rng);

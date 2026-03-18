@@ -21,4 +21,5 @@ SolverResult solve(
     const std::string& feasibility_mode = "o1",
     const std::string& destroy_config = "random",
     const std::string& repair_config = "greedy",
-    const std::string& selection_config = "random");
+    const std::string& selection_config = "random",
+    double time_limit = 0.0);

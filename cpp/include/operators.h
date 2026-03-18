@@ -9,3 +9,4 @@
 #include "operators/destroy/low_slack_route.h"
 #include "operators/repair/greedy_insertion.h"
 #include "operators/repair/regret_insertion.h"
+#include "operators/repair/slack_insertion.h"
