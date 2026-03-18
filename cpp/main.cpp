@@ -26,7 +26,7 @@ int main(int argc, char* argv[]) {
     int iterations = 1000;
     int seed = 42;
     std::string feasibility_mode = "o1";
-    std::string destroy_config = "random,worst,shaw";
+    std::string destroy_config = "random,worst,shaw,rtcritical";
     std::string repair_config = "greedy,regret2,regret3";
     std::string selection_config = "roulette";
     double sa_start = 100.0;

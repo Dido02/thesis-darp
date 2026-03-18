@@ -5,5 +5,6 @@
 #include "operators/destroy/random_removal.h"
 #include "operators/destroy/worst_removal.h"
 #include "operators/destroy/shaw_removal.h"
+#include "operators/destroy/ride_time_critical.h"
 #include "operators/repair/greedy_insertion.h"
 #include "operators/repair/regret_insertion.h"

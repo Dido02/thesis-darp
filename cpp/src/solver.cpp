@@ -167,6 +167,10 @@ static OperatorRegistry build_registry(
             registry.add_destroy("worst", worst_removal);
         } else if (name == "shaw") {
             registry.add_destroy("shaw", shaw_removal);
+        } else if (name == "rtcritical") {
+            registry.add_destroy("rtcritical", ride_time_critical_removal);
+        // } else if (name == "lowslack") {
+        //     registry.add_destroy("lowslack", low_slack_route_removal);
         } else {
             std::cerr << "Unknown destroy operator: " << name << "\n";
         }
@@ -180,6 +184,8 @@ static OperatorRegistry build_registry(
             registry.add_repair("regret2", regret2_insertion);
         } else if (name == "regret3") {
             registry.add_repair("regret3", regret3_insertion);
+        // } else if (name == "slack") {
+        //     registry.add_repair("slack", slack_insertion);
         } else {
             std::cerr << "Unknown repair operator: " << name << "\n";
         }
