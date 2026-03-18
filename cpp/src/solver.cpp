@@ -307,7 +307,8 @@ SolverResult solve(
             // Calibrate cooling after 50 warm-up iterations
             if (!sa_calibrated && iter == 10 && elapsed > 0.0) {
                 double iters_per_sec = 10.0 / elapsed;
-                int estimated_total = static_cast<int>(iters_per_sec * time_limit);
+                int time_based_total = static_cast<int>(iters_per_sec * time_limit);
+                int estimated_total = std::min(time_based_total, max_iterations);
                 estimated_total = std::max(estimated_total, 100);
                 sa_step = std::pow(end_temperature / start_temperature,
                                   1.0 / estimated_total);
