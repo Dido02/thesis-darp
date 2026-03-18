@@ -23,6 +23,7 @@ public:
     std::vector<std::vector<int>> routes;
     std::set<int> unassigned;
     std::string feasibility_mode = "slack";  // "slack" or "full"
+    mutable double cached_obj_ = -1.0;
 
     explicit DARPSolution(const DARPInstance& inst);
 

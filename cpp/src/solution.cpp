@@ -272,6 +272,7 @@ std::pair<bool, std::string> DARPSolution::is_feasible() const {
 }
 
 double DARPSolution::objective() const {
+    if (cached_obj_ >= 0.0) return cached_obj_;
     const auto& tt = instance->travel_time;
     double total = 0.0;
     for (const auto& route : routes) {
@@ -280,6 +281,7 @@ double DARPSolution::objective() const {
         }
     }
     total += static_cast<double>(unassigned.size()) * UNASSIGNED_PENALTY;
+    cached_obj_ = total;
     return total;
 }
 

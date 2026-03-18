@@ -263,17 +263,16 @@ SolverResult solve(
         init_sol.feasibility_mode = feasibility_mode;
     }
 
-    // SA parameters
-    // double sa_step = std::pow(end_temperature / start_temperature,
-    //                           1.0 / max_iterations);
-    // double temperature = start_temperature;
+    // SA parameters — calibrated per Gschwind & Drexl (2016)
+    double sa_start_temp = 0.025 * init_sol.objective();
+    double sa_end_temp = 0.065 * sa_start_temp;
 
-    double temperature = start_temperature;
+    double temperature = sa_start_temp;
     double sa_step;
     if (time_limit > 0.0) {
         sa_step = 1.0;  // no cooling until calibrated
     } else {
-        sa_step = std::pow(end_temperature / start_temperature,
+        sa_step = std::pow(sa_end_temp / sa_start_temp,
                           1.0 / max_iterations);
     }
 
@@ -291,6 +290,11 @@ SolverResult solve(
     auto solve_t0 = Clock::now();
     bool sa_calibrated = false;
 
+    double total_destroy_time = 0.0;
+    double total_repair_time = 0.0;
+    double total_other_time = 0.0;
+    auto prev_iter_end = solve_t0;
+
     for (int iter = 0; iter < max_iterations; iter++) {
 
         if (time_limit > 0.0) {
@@ -304,15 +308,15 @@ SolverResult solve(
                 break;
             }
 
-            // Calibrate cooling after 50 warm-up iterations
+            // Calibrate cooling after warm-up iterations
             if (!sa_calibrated && iter == 10 && elapsed > 0.0) {
                 double iters_per_sec = 10.0 / elapsed;
                 int time_based_total = static_cast<int>(iters_per_sec * time_limit);
                 int estimated_total = std::min(time_based_total, max_iterations);
                 estimated_total = std::max(estimated_total, 100);
-                sa_step = std::pow(end_temperature / start_temperature,
+                sa_step = std::pow(sa_end_temp / sa_start_temp,
                                   1.0 / estimated_total);
-                temperature = start_temperature;
+                temperature = sa_start_temp;
                 sa_calibrated = true;
                 if (verbose) {
                     std::cout << "  SA calibrated: ~" << iters_per_sec
@@ -329,8 +333,16 @@ SolverResult solve(
         repair_count[r_idx]++;
 
         // Destroy + Repair
+        auto t_destroy = Clock::now();
         DARPSolution destroyed = destroy(current, rng);
+        auto t_repair = Clock::now();
         DARPSolution candidate = repair(destroyed, rng);
+        auto t_done = Clock::now();
+
+        total_destroy_time += std::chrono::duration<double>(t_repair - t_destroy).count();
+        total_repair_time += std::chrono::duration<double>(t_done - t_repair).count();
+        total_other_time += std::chrono::duration<double>(t_destroy - prev_iter_end).count();
+
         double candidate_obj = candidate.objective();
 
         // SA acceptance
@@ -376,6 +388,8 @@ SolverResult solve(
                       << ", best=" << best_obj
                       << ", temp=" << temperature << "\n";
         }
+
+        prev_iter_end = Clock::now();
     }
 
     auto solve_t1 = Clock::now();
@@ -410,6 +424,11 @@ SolverResult solve(
                           << ": weight=" << registry.get_repair_weights()[i] << "\n";
             }
         }
+
+        std::cout << "Time breakdown:\n"
+                << "  destroy: " << total_destroy_time << "s\n"
+                << "  repair:  " << total_repair_time << "s\n"
+                << "  other:   " << total_other_time << "s\n";
     }
 
     DARPSolution repaired = (feasibility_mode == "full")

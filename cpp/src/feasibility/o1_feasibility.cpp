@@ -131,13 +131,16 @@ void compute_aeap(const std::vector<int>& route, const DARPInstance& inst,
 //
 // This is an iterative fixed-point computation equivalent to running the
 // "reverse Tang et al." algorithm. Converges in at most r iterations.
+//
+// pickup_pairs/delivery_pairs: pre-built arrays of (pickup_pos, delivery_pos)
+// for each request present in the route. Built once in precompute_route_aux.
 // ---------------------------------------------------------------------------
-void compute_alap(const std::vector<int>& route, const DARPInstance& inst,
+static void compute_alap_internal(const std::vector<int>& route, const DARPInstance& inst,
                   const std::vector<double>& tau, const std::vector<double>& depart,
-                  std::vector<double>& tau_bar) {
+                  std::vector<double>& tau_bar,
+                  const std::vector<std::pair<int,int>>& pd_pairs) {
     const auto& nodes = inst.nodes;
     const auto& tt = inst.travel_time;
-    int n = inst.num_requests;
     int size = static_cast<int>(route.size());
 
     tau_bar.resize(size);
@@ -146,14 +149,6 @@ void compute_alap(const std::vector<int>& route, const DARPInstance& inst,
         for (int i = 0; i < size; i++)
             tau_bar[i] = nodes[route[i]].latest;
         return;
-    }
-
-    // Build pickup/delivery position maps
-    std::unordered_map<int, int> pickup_pos, delivery_pos;
-    for (int i = 0; i < size; i++) {
-        int nid = route[i];
-        if (nid >= 1 && nid <= n) pickup_pos[nid] = i;
-        else if (nid >= n + 1 && nid <= 2 * n) delivery_pos[nid - n] = i;
     }
 
     // Iterative tightening loop
@@ -176,10 +171,7 @@ void compute_alap(const std::vector<int>& route, const DARPInstance& inst,
         }
 
         // Ride-time tightening
-        for (auto& [req, p] : pickup_pos) {
-            auto dit = delivery_pos.find(req);
-            if (dit == delivery_pos.end()) continue;
-            int d = dit->second;
+        for (const auto& [p, d] : pd_pairs) {
             double s_p = nodes[route[p]].service_duration;
             double ride = tau_bar[d] - (tau_bar[p] + s_p);
             if (ride > inst.max_ride_time + EPS) {
@@ -212,27 +204,44 @@ void compute_alap(const std::vector<int>& route, const DARPInstance& inst,
         tau_bar[i] = std::max(tau_bar[i], tau[i]);
 }
 
-// ---------------------------------------------------------------------------
-// compute_alap_constrained — Fix position fix_pos to tau[fix_pos], propagate.
-// ---------------------------------------------------------------------------
-void compute_alap_constrained(const std::vector<int>& route, const DARPInstance& inst,
-                              const std::vector<double>& tau, const std::vector<double>& depart,
-                              const std::vector<double>& tau_bar,
-                              int fix_pos, std::vector<double>& tau_bar_c) {
-    const auto& nodes = inst.nodes;
-    const auto& tt = inst.travel_time;
+// Public wrapper that builds pd_pairs (used by check_alap_feasible)
+void compute_alap(const std::vector<int>& route, const DARPInstance& inst,
+                  const std::vector<double>& tau, const std::vector<double>& depart,
+                  std::vector<double>& tau_bar) {
     int n = inst.num_requests;
     int size = static_cast<int>(route.size());
-
-    tau_bar_c = tau_bar;
-    tau_bar_c[fix_pos] = tau[fix_pos];
-
-    std::unordered_map<int, int> pickup_pos, delivery_pos;
+    std::vector<int> pickup_pos(n + 1, -1);
+    std::vector<std::pair<int,int>> pd_pairs;
     for (int i = 0; i < size; i++) {
         int nid = route[i];
         if (nid >= 1 && nid <= n) pickup_pos[nid] = i;
-        else if (nid >= n + 1 && nid <= 2 * n) delivery_pos[nid - n] = i;
+        else if (nid >= n + 1 && nid <= 2 * n) {
+            int req = nid - n;
+            if (pickup_pos[req] >= 0)
+                pd_pairs.emplace_back(pickup_pos[req], i);
+        }
     }
+    compute_alap_internal(route, inst, tau, depart, tau_bar, pd_pairs);
+}
+
+// ---------------------------------------------------------------------------
+// compute_alap_constrained — Fix position fix_pos to tau[fix_pos], propagate.
+// Reuses pre-built pd_pairs and a caller-provided scratch vector.
+// ---------------------------------------------------------------------------
+static void compute_alap_constrained_fast(
+    const std::vector<int>& route, const DARPInstance& inst,
+    const std::vector<double>& tau,
+    const std::vector<double>& tau_bar,
+    const std::vector<std::pair<int,int>>& pd_pairs,
+    int fix_pos, std::vector<double>& tau_bar_c) {
+
+    const auto& nodes = inst.nodes;
+    const auto& tt = inst.travel_time;
+    int size = static_cast<int>(route.size());
+
+    // Reset to tau_bar, then fix
+    for (int i = 0; i < size; i++) tau_bar_c[i] = tau_bar[i];
+    tau_bar_c[fix_pos] = tau[fix_pos];
 
     for (int iter = 0; iter < size + 2; iter++) {
         bool changed = false;
@@ -249,10 +258,7 @@ void compute_alap_constrained(const std::vector<int>& route, const DARPInstance&
         }
 
         // Ride-time tightening
-        for (auto& [req, p] : pickup_pos) {
-            auto dit = delivery_pos.find(req);
-            if (dit == delivery_pos.end()) continue;
-            int d = dit->second;
+        for (const auto& [p, d] : pd_pairs) {
             double s_p = nodes[route[p]].service_duration;
             double ride = tau_bar_c[d] - (tau_bar_c[p] + s_p);
             if (ride > inst.max_ride_time + EPS) {
@@ -284,22 +290,60 @@ void compute_alap_constrained(const std::vector<int>& route, const DARPInstance&
         tau_bar_c[i] = std::max(tau_bar_c[i], tau[i]);
 }
 
+// Keep old signature for check_alap_feasible (called rarely)
+void compute_alap_constrained(const std::vector<int>& route, const DARPInstance& inst,
+                              const std::vector<double>& tau, const std::vector<double>& depart,
+                              const std::vector<double>& tau_bar,
+                              int fix_pos, std::vector<double>& tau_bar_c) {
+    int n = inst.num_requests;
+    int size = static_cast<int>(route.size());
+    std::vector<int> pickup_pos(n + 1, -1);
+    std::vector<std::pair<int,int>> pd_pairs;
+    for (int i = 0; i < size; i++) {
+        int nid = route[i];
+        if (nid >= 1 && nid <= n) pickup_pos[nid] = i;
+        else if (nid >= n + 1 && nid <= 2 * n) {
+            int req = nid - n;
+            if (pickup_pos[req] >= 0)
+                pd_pairs.emplace_back(pickup_pos[req], i);
+        }
+    }
+    tau_bar_c.resize(size);
+    compute_alap_constrained_fast(route, inst, tau, tau_bar, pd_pairs, fix_pos, tau_bar_c);
+}
+
 // ---------------------------------------------------------------------------
 // precompute_route_aux — Master preprocessing, O(r^3) total.
+// Optimized: builds pickup/delivery maps once, reuses scratch vectors.
 // ---------------------------------------------------------------------------
 RouteAuxData precompute_route_aux(const std::vector<int>& route, const DARPInstance& inst) {
     RouteAuxData aux;
     int size = static_cast<int>(route.size());
+    int n = inst.num_requests;
     aux.route = route;
 
     compute_aeap(route, inst, aux.tau, aux.depart, aux.load);
-    compute_alap(route, inst, aux.tau, aux.depart, aux.tau_bar);
 
-    // Constrained ALAP for each position
+    // Build pickup/delivery pair list once
+    std::vector<int> pickup_pos(n + 1, -1);
+    std::vector<std::pair<int,int>> pd_pairs;
+    for (int i = 0; i < size; i++) {
+        int nid = route[i];
+        if (nid >= 1 && nid <= n) pickup_pos[nid] = i;
+        else if (nid >= n + 1 && nid <= 2 * n) {
+            int req = nid - n;
+            if (pickup_pos[req] >= 0)
+                pd_pairs.emplace_back(pickup_pos[req], i);
+        }
+    }
+
+    compute_alap_internal(route, inst, aux.tau, aux.depart, aux.tau_bar, pd_pairs);
+
+    // Constrained ALAP for each position — reuse scratch vector
     aux.tau_bar_given.resize(size, std::vector<double>(size, 0.0));
+    std::vector<double> tau_bar_c(size);
     for (int k = 0; k < size; k++) {
-        std::vector<double> tau_bar_c;
-        compute_alap_constrained(route, inst, aux.tau, aux.depart, aux.tau_bar, k, tau_bar_c);
+        compute_alap_constrained_fast(route, inst, aux.tau, aux.tau_bar, pd_pairs, k, tau_bar_c);
         for (int i = 0; i < size; i++)
             aux.tau_bar_given[i][k] = tau_bar_c[i];
     }
