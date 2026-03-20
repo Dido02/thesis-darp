@@ -13,7 +13,7 @@ static constexpr double EPS = 1e-6;
 // ---------------------------------------------------------------------------
 void compute_aeap(const std::vector<int>& route, const DARPInstance& inst,
                   std::vector<double>& tau, std::vector<double>& depart,
-                  std::vector<int>& load) {
+                  std::vector<int>& load, bool skip_step2) {
     const auto& nodes = inst.nodes;
     const auto& tt = inst.travel_time;
     int size = static_cast<int>(route.size());
@@ -47,6 +47,8 @@ void compute_aeap(const std::vector<int>& route, const DARPInstance& inst,
     }
 
     // --- Step 2: Delay depot departure by forward time slack ---
+    // Skipped when skip_step2=true (O(1) precomputation needs the depot gap).
+    if (!skip_step2) {
     std::vector<double> slack(size, 0.0);
     slack[size - 1] = nodes[route[size - 1]].latest - tau[size - 1];
     for (int i = size - 2; i >= 0; i--) {
@@ -65,6 +67,7 @@ void compute_aeap(const std::vector<int>& route, const DARPInstance& inst,
             depart[i] = tau[i] + node.service_duration;
         }
     }
+    } // end if (!skip_step2)
 
     // --- Step 3: Per-pickup ride-time reduction (Tang et al. 2010) ---
     // For each pickup in route order, if the ride time exceeds L,
@@ -109,6 +112,19 @@ void compute_aeap(const std::vector<int>& route, const DARPInstance& inst,
             // Also respect the pickup's own time window
             delay = std::min(delay, nodes[nid].latest - tau[i]);
             if (delay < EPS) continue;
+
+            // Cap by forward time slack from position i: ensure no downstream
+            // node gets pushed past its latest time window.
+            {
+                double cum_wait = 0.0;
+                for (int j = i + 1; j < size; j++) {
+                    double arr_j = depart[j - 1] + tt[route[j - 1]][route[j]];
+                    cum_wait += tau[j] - arr_j;
+                    double tw_slack = nodes[route[j]].latest - tau[j];
+                    delay = std::min(delay, tw_slack + cum_wait);
+                }
+                if (delay < EPS) continue;
+            }
 
             // Apply delay and propagate forward
             tau[i] += delay;
@@ -322,7 +338,10 @@ RouteAuxData precompute_route_aux(const std::vector<int>& route, const DARPInsta
     int n = inst.num_requests;
     aux.route = route;
 
-    compute_aeap(route, inst, aux.tau, aux.depart, aux.load);
+    // Use Steps 1+3 (skip Step 2) for O(1) precomputation.
+    // Step 3 fixes ride times (needed for correct ALAP), while skipping
+    // Step 2 preserves the depot slack gap for Proposition 1 interpolation.
+    compute_aeap(route, inst, aux.tau, aux.depart, aux.load, /*skip_step2=*/true);
 
     // Build pickup/delivery pair list once
     std::vector<int> pickup_pos(n + 1, -1);
@@ -424,6 +443,9 @@ bool check_insertion_o1(const RouteAuxData& aux, int req, int k, int l,
     double s_d = dn.service_duration;
 
     // --- Capacity check ---
+    // The pickup adds 1 passenger from the insertion point to the delivery.
+    // load[k-1] is the load just before the pickup; positions k..l-1 also carry the extra.
+    if (aux.load[k - 1] + 1 > Q) return false;
     if (k <= l - 1) {
         if (aux.max_load[k][l - 1] + 1 > Q) return false;
     }
@@ -569,13 +591,12 @@ bool check_insertion_o1(const RouteAuxData& aux, int req, int k, int l,
         // Lines 9-11: increase service times
         max_tau_km1 += delta_l;
         max_tau_p += delta_l;
-        tau_k_new += delta_l;
-
-        // Line 12: re-check at route[k]
-        // For k+1 == l: use max instead of simple addition (paper page 10)
+        // For k+1 == l: replace += with max (paper page 10, Line 11)
         if (k == l - 1) {
             tau_k_new = std::max(tau_k_new,
                                   max_tau_p + s_p + tt[pickup_id][route[k]]);
+        } else {
+            tau_k_new += delta_l;
         }
 
         tb_k = tau_bar_at(aux, k, max_tau_km1, k - 1);
@@ -640,11 +661,12 @@ bool check_insertion_o1(const RouteAuxData& aux, int req, int k, int l,
         tau_p += delta_i;
 
         // Line 19: increase tau_k_new
-        tau_k_new += delta_i;
-        // For k+1 == l: use max (paper page 10)
+        // For k+1 == l: replace += with max (paper page 10, Line 19)
         if (k == l - 1) {
             tau_k_new = std::max(tau_k_new,
                                   tau_p + s_p + tt[pickup_id][route[k]]);
+        } else {
+            tau_k_new += delta_i;
         }
 
         // Line 20: maximize vk given new pickup time
@@ -677,6 +699,10 @@ std::pair<bool, std::string> check_alap_feasible(
 
     std::vector<double> tau, depart;
     std::vector<int> load;
+    // Use full Steps 1+2+3 AEAP for ground truth feasibility.
+    // Step 3 (ride-time repair) is needed to produce a schedule where
+    // ride times are satisfied. Without it, tau might exceed tau_bar
+    // at positions with tight ride-time constraints.
     compute_aeap(route, inst, tau, depart, load);
 
     // Capacity

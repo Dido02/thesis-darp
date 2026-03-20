@@ -171,6 +171,8 @@ static OperatorRegistry build_registry(
             registry.add_destroy("rtcritical", ride_time_critical_removal);
         } else if (name == "lowslack") {
             registry.add_destroy("lowslack", low_slack_route_removal);
+        } else if (name == "entireroute") {
+            registry.add_destroy("entireroute", entire_route_removal);
         } else {
             std::cerr << "Unknown destroy operator: " << name << "\n";
         }
@@ -186,6 +188,10 @@ static OperatorRegistry build_registry(
             registry.add_repair("regret3", regret3_insertion);
         } else if (name == "slack") {
             registry.add_repair("slack", slack_insertion);
+        } else if (name == "regret4") {
+            registry.add_repair("regret4", regret4_insertion);
+        } else if (name == "regretM") {
+            registry.add_repair("regretM", regretM_insertion);
         } else {
             std::cerr << "Unknown repair operator: " << name << "\n";
         }
@@ -249,7 +255,8 @@ SolverResult solve(
 
     // Build initial solution
     auto t0 = Clock::now();
-    DARPSolution init_sol = build_initial_solution(instance);
+    DARPSolution init_sol = build_initial_solution(instance, "o1");
+    init_sol.feasibility_mode = feasibility_mode;
     auto t1 = Clock::now();
     double construction_time = std::chrono::duration<double>(t1 - t0).count();
 
@@ -259,12 +266,12 @@ SolverResult solve(
                   << " (" << construction_time << "s)\n";
     }
 
-    if (feasibility_mode != "slack") {
-        init_sol.feasibility_mode = feasibility_mode;
-    }
+    // if (feasibility_mode != "slack") {
+    //     init_sol.feasibility_mode = feasibility_mode;
+    // }
 
     // SA parameters — calibrated per Gschwind & Drexl (2016)
-    double sa_start_temp = 0.025 * init_sol.objective();
+    double sa_start_temp = 0.025 * init_sol.travel_cost();
     double sa_end_temp = 0.065 * sa_start_temp;
 
     double temperature = sa_start_temp;
@@ -274,6 +281,13 @@ SolverResult solve(
     } else {
         sa_step = std::pow(sa_end_temp / sa_start_temp,
                           1.0 / max_iterations);
+    }
+
+    if (verbose) {
+        std::cout << "  SA: start_temp=" << sa_start_temp
+                  << ", end_temp=" << sa_end_temp
+                  << ", travel_cost=" << init_sol.travel_cost()
+                  << ", objective=" << init_sol.objective() << "\n";
     }
 
     DARPSolution best = init_sol.copy();

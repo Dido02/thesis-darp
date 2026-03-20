@@ -7,6 +7,7 @@
 #include "operators/destroy/shaw_removal.h"
 #include "operators/destroy/ride_time_critical.h"
 #include "operators/destroy/low_slack_route.h"
+#include "operators/destroy/entire_route_removal.h"
 #include "operators/repair/greedy_insertion.h"
 #include "operators/repair/regret_insertion.h"
 #include "operators/repair/slack_insertion.h"

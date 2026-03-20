@@ -288,3 +288,20 @@ DARPSolution regret3_insertion(const DARPSolution& sol, std::mt19937& rng) {
         return regret_k_classic(sol, rng, 3);
     }
 }
+
+DARPSolution regret4_insertion(const DARPSolution& sol, std::mt19937& rng) {
+    if (sol.feasibility_mode == "o1") {
+        return regret_k_o1(sol, rng, 4);
+    } else {
+        return regret_k_classic(sol, rng, 4);
+    }
+}
+
+DARPSolution regretM_insertion(const DARPSolution& sol, std::mt19937& rng) {
+    int M = static_cast<int>(sol.routes.size());
+    if (sol.feasibility_mode == "o1") {
+        return regret_k_o1(sol, rng, M);
+    } else {
+        return regret_k_classic(sol, rng, M);
+    }
+}

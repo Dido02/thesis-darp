@@ -6,7 +6,7 @@
 // Auxiliary data for O(1) insertion feasibility checks (Gschwind & Drexl 2019)
 struct RouteAuxData {
     std::vector<int> route;
-    std::vector<double> tau;          // AEAP begin-service (from full 3-step scheduler)
+    std::vector<double> tau;          // AEAP begin-service (Step 1 only: true earliest)
     std::vector<double> tau_bar;      // ALAP begin-service (latest feasible)
     std::vector<double> depart;       // AEAP departure times
     std::vector<int> load;            // load at each position
@@ -17,10 +17,13 @@ struct RouteAuxData {
     std::vector<std::vector<int>> max_load;          // max(load[i..j]) for O(1) capacity
 };
 
-// Run the full 3-step scheduler, return {tau, depart, load}. No constraint checking.
+// Run the AEAP scheduler, return {tau, depart, load}. No constraint checking.
+// skip_step2=true: Steps 1+3 only (skip depot delay) — for O(1) precomputation.
+//   Preserves the tau-to-tau_bar gap needed for Proposition 1 interpolation.
+// skip_step2=false (default): full Steps 1+2+3.
 void compute_aeap(const std::vector<int>& route, const DARPInstance& inst,
                   std::vector<double>& tau, std::vector<double>& depart,
-                  std::vector<int>& load);
+                  std::vector<int>& load, bool skip_step2 = false);
 
 // Compute latest feasible begin-service times (ALAP schedule).
 void compute_alap(const std::vector<int>& route, const DARPInstance& inst,
