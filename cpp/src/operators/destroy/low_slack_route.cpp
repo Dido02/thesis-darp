@@ -51,20 +51,25 @@ DARPSolution low_slack_route_removal(const DARPSolution& sol, std::mt19937& rng)
             depart = tau[i] + nodes[route[i]].service_duration;
         }
 
-        // Compute forward time slack (standard PDPTW)
-        std::vector<double> slack(rlen);
-        std::vector<double> arrival(rlen, 0.0);
-        arrival[0] = 0.0;
+        // Compute forward time slack via backward recursion
+        std::vector<double> arrival_arr(rlen, 0.0);
         depart = tau[0] + nodes[route[0]].service_duration;
         for (int i = 1; i < rlen; i++) {
-            arrival[i] = depart + tt[route[i - 1]][route[i]] - tau[i] + tau[i]; // just store
+            arrival_arr[i] = depart + tt[route[i - 1]][route[i]];
             depart = tau[i] + nodes[route[i]].service_duration;
         }
 
-        // Total slack = sum of (latest - tau) at each stop
+        std::vector<double> slack(rlen);
+        slack[rlen - 1] = nodes[route[rlen - 1]].latest - tau[rlen - 1];
+        for (int i = rlen - 2; i >= 0; i--) {
+            double wait_next = tau[i + 1] - arrival_arr[i + 1];
+            slack[i] = std::min(nodes[route[i]].latest - tau[i], slack[i + 1] + wait_next);
+        }
+
+        // Total forward time slack
         double total_slack = 0.0;
         for (int i = 0; i < rlen; i++) {
-            total_slack += nodes[route[i]].latest - tau[i];
+            total_slack += slack[i];
         }
 
         // Count requests in this route

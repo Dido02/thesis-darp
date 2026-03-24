@@ -10,7 +10,7 @@
 static constexpr double EPS = 1e-6;
 
 // Alpha controls cost vs slack tradeoff (0 = greedy, 1 = max slack preservation)
-static constexpr double ALPHA = 0.5;
+static constexpr double ALPHA = 0.1;
 
 // ---------------------------------------------------------------------------
 // Helper: compute total forward time slack for a route
@@ -47,12 +47,24 @@ static double compute_route_slack(const std::vector<int>& route,
         slack[i] = std::min(nodes[route[i]].latest - tau[i], slack[i + 1] + wait_next);
     }
 
-    // Return total slack (sum over all positions)
+    // Return total forward time slack (sum over all positions)
     double total = 0.0;
     for (int i = 0; i < size; i++) {
-        total += nodes[route[i]].latest - tau[i];
+        total += slack[i];
     }
     return total;
+}
+
+// ---------------------------------------------------------------------------
+// Helper: compute total travel cost (sum of edge travel times) for a route
+// ---------------------------------------------------------------------------
+static double compute_route_cost(const std::vector<int>& route,
+                                  const DARPInstance& inst) {
+    double cost = 0.0;
+    for (int i = 0; i + 1 < static_cast<int>(route.size()); i++) {
+        cost += inst.travel_time[route[i]][route[i + 1]];
+    }
+    return cost;
 }
 
 // ---------------------------------------------------------------------------
@@ -66,12 +78,14 @@ static DARPSolution slack_insertion_o1(const DARPSolution& sol, std::mt19937& rn
     const auto& nodes = inst.nodes;
     int n = inst.num_requests;
 
-    // Precompute aux data and baseline slack for all routes
+    // Precompute aux data, baseline slack and baseline cost for all routes
     std::vector<RouteAuxData> aux_cache(repaired.routes.size());
     std::vector<double> baseline_slack(repaired.routes.size());
+    std::vector<double> baseline_cost(repaired.routes.size());
     for (int r = 0; r < static_cast<int>(repaired.routes.size()); r++) {
         aux_cache[r] = precompute_route_aux(repaired.routes[r], inst);
         baseline_slack[r] = compute_route_slack(repaired.routes[r], inst);
+        baseline_cost[r] = compute_route_cost(repaired.routes[r], inst);
     }
 
     while (!repaired.unassigned.empty()) {
@@ -115,13 +129,22 @@ static DARPSolution slack_insertion_o1(const DARPSolution& sol, std::mt19937& rn
                         std::vector<int> candidate = route;
                         candidate.insert(candidate.begin() + k_pos, pickup_id);
                         candidate.insert(candidate.begin() + l_pos + 1, delivery_id);
+
                         double new_slack = compute_route_slack(candidate, inst);
                         double slack_loss = baseline_slack[r] - new_slack;
 
-                        // Combined score: lower is better
-                        double score = (1.0 - ALPHA) * delta + ALPHA * slack_loss;
+                        // Normalized score: lower is better
+                        double norm_delta = (baseline_cost[r] > EPS)
+                            ? delta / baseline_cost[r] : delta;
+                        double norm_slack = (baseline_slack[r] > EPS)
+                            ? slack_loss / baseline_slack[r] : slack_loss;
+                        double score = (1.0 - ALPHA) * norm_delta + ALPHA * norm_slack;
 
                         if (score < best_score) {
+                            // Full feasibility guard: only check when candidate beats best
+                            auto [feas, reason] = repaired.check_route_feasibility(candidate);
+                            if (!feas) continue;
+
                             best_score = score;
                             best_req = req;
                             best_route = r;
@@ -141,9 +164,10 @@ static DARPSolution slack_insertion_o1(const DARPSolution& sol, std::mt19937& rn
             repaired.routes[best_route].begin() + best_d, best_req + n);
         repaired.unassigned.erase(best_req);
 
-        // Recompute aux and slack for modified route
+        // Recompute aux, slack, and cost for modified route
         aux_cache[best_route] = precompute_route_aux(repaired.routes[best_route], inst);
         baseline_slack[best_route] = compute_route_slack(repaired.routes[best_route], inst);
+        baseline_cost[best_route] = compute_route_cost(repaired.routes[best_route], inst);
     }
 
     return repaired;
@@ -161,10 +185,12 @@ static DARPSolution slack_insertion_classic(const DARPSolution& sol, std::mt1993
     int n = inst.num_requests;
     int Q = inst.vehicle_capacity;
 
-    // Precompute baseline slack
+    // Precompute baseline slack and cost
     std::vector<double> baseline_slack(repaired.routes.size());
+    std::vector<double> baseline_cost(repaired.routes.size());
     for (int r = 0; r < static_cast<int>(repaired.routes.size()); r++) {
         baseline_slack[r] = compute_route_slack(repaired.routes[r], inst);
+        baseline_cost[r] = compute_route_cost(repaired.routes[r], inst);
     }
 
     while (!repaired.unassigned.empty()) {
@@ -230,7 +256,11 @@ static DARPSolution slack_insertion_classic(const DARPSolution& sol, std::mt1993
                         double new_slack = compute_route_slack(candidate, inst);
                         double slack_loss = baseline_slack[r] - new_slack;
 
-                        double score = (1.0 - ALPHA) * delta + ALPHA * slack_loss;
+                        double norm_delta = (baseline_cost[r] > EPS)
+                            ? delta / baseline_cost[r] : delta;
+                        double norm_slack = (baseline_slack[r] > EPS)
+                            ? slack_loss / baseline_slack[r] : slack_loss;
+                        double score = (1.0 - ALPHA) * norm_delta + ALPHA * norm_slack;
 
                         if (score < best_score) {
                             best_score = score;
@@ -253,6 +283,7 @@ static DARPSolution slack_insertion_classic(const DARPSolution& sol, std::mt1993
         repaired.unassigned.erase(best_req);
 
         baseline_slack[best_route] = compute_route_slack(repaired.routes[best_route], inst);
+        baseline_cost[best_route] = compute_route_cost(repaired.routes[best_route], inst);
     }
 
     return repaired;

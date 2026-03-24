@@ -1,94 +1,81 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+This file provides guidance to Claude Code when working with code in this repository.
 
 ## Project Overview
 
-Adaptive Large Neighborhood Search (ALNS) solver for the Dial-a-Ride Problem (DARP). Academic thesis project implementing pickup-and-delivery vehicle routing with time windows, ride time constraints, and capacity limits. Uses the N-Wouda ALNS Python library.
+ALNS solver for the Dial-a-Ride Problem (DARP). Two implementations:
+- **C++** (`cpp/`) — Performance-critical with O(1) feasibility checking. Currently being debugged.
+- **Python** (`src/`) — Working baseline using N-Wouda ALNS library.
 
-## Commands
+## Current Focus: C++ O(1) Feasibility Check Debugging
+
+Implementing constant-time feasibility test from Gschwind & Drexl (2016). Status:
+- 62% false rejection rate (too conservative) — main bug
+- 0.4% false acceptance rate (too permissive) — secondary bug
+- compute_aeap produces infeasible schedules on some routes (tau > latest)
+- Preprocessing data (tau_bar, tau_bar_given, gamma, wait) verified correct by brute force
+
+IMPORTANT: Always read docs/algorithms.md before modifying feasibility code. It documents the index mapping (paper 1-indexed → code 0-indexed) and travel time convention (paper includes service time, code does not).
+
+## C++ Build & Test
 
 ```bash
-# Run solver on a Cordeau instance
+cd cpp/build && cmake .. -DCMAKE_BUILD_TYPE=Release && make -j8
+
+./test_o1_vs_full ../../data/cordeau/pr03.txt
+./test_o1_diagnostic ../../data/cordeau/pr03.txt
+./darp_solver ../../data/cordeau/pr03.txt
+```
+
+## C++ Key Files
+
+- `cpp/src/feasibility/o1_feasibility.cpp` — O(1) check (Algorithms 2 & 3) — MAIN DEBUG TARGET
+- `cpp/include/feasibility/o1_feasibility.h` — RouteAuxData struct, declarations
+- `cpp/src/feasibility/full_optimizer.cpp` — Full feasibility check
+- `cpp/include/feasibility.h` — Ground truth feasibility
+- `cpp/include/instance.h` — DARPInstance, Node
+- `cpp/include/solution.h` — DARPSolution
+- `cpp/src/initial_solution.cpp` — Greedy initial solution
+- `cpp/tests/test_o1_vs_full.cpp` — Agreement test (O(1) vs ALAP)
+- `cpp/tests/test_o1_diagnostic.cpp` — Per-function diagnostic with tracing
+
+## Reference Materials
+
+- `docs/algorithms.md` — Extracted algorithms, Proposition 1, special cases, index mappings
+- `docs/LM-2016-08.pdf` — Gschwind & Drexl 2016 (O(1) check paper)
+- `docs/tang.pdf` — Tang et al. 2010 (AEAP scheduling)
+
+## Key Conventions
+
+- Node numbering: 0=origin depot, 1..n=pickups, n+1..2n=deliveries, 2n+1=destination depot
+- check_insertion_o1(aux, req, k, l, inst): insert pickup before position k, delivery before position l
+- Paper is 1-indexed (insert after v_k), code is 0-indexed (insert before position k)
+- Paper's t_{ij} INCLUDES service time at i; code uses tt[][] = pure travel + explicit service_duration
+- Known BKS for pr03: 532.00
+
+## Rules
+
+- NEVER change algorithm logic without citing which paper line/equation justifies it
+- Always verify changes by running test_o1_vs_full on pr03
+- After editing o1_feasibility.cpp, rebuild and test before moving on
+
+## Agents
+
+Subagents in .claude/agents/:
+- **paper-auditor** — Compares paper algorithms against C++ code. Read-only.
+- **test-runner** — Builds and runs tests/solver, reports structured results.
+- **failure-analyzer** — Traces code with specific inputs to diagnose WHY a case fails.
+
+## Python Solver
+
+```bash
 python main.py data/cordeau/pr01.txt --iterations 10000 --seed 42
-
-# Run solver on a Li & Lim instance
-python main.py data/cordeau/pr01.txt --format li_lim
-
-# Initial solution only (skip ALNS)
-python main.py data/cordeau/pr01.txt --no-alns
-
-# Analyze instance characteristics
-python analyze_instance.py data/cordeau/pr01.txt --plot
-
-# Run tests
 python -m pytest src/tests/
-
-# Run a single test file
-python -m pytest src/tests/test_solution.py
-
-# Run a single test
-python -m pytest src/tests/test_solution.py::test_known_solution_feasibility
-
-# Quick solver demo
-python scripts/run_solver.py
-
-# Download Cordeau benchmark instances
-python scripts/download_cordeau.py
 ```
 
 Dependencies: `pip install alns numpy matplotlib` (Python 3.12, venv in `.venv/`)
 
-## Architecture
+## Thesis Context
 
-### Data Flow
-`Instance file → Parser → DARPInstance → Initial solution (greedy) → ALNS destroy/repair loop → Final DARPSolution`
-
-### Core Modules (src/)
-
-- **instance.py** — Data model: `Node`, `DARPInstance`. Node numbering: 0=origin depot, 1..n=pickups, n+1..2n=deliveries, 2n+1=destination depot. DARPInstance precomputes distance/time matrix on construction.
-- **solution.py** — `RouteSchedule`, `DARPSolution`. Routes are `list[list[int]]` (node IDs per vehicle). Solution implements `objective()` (total distance + 1000 penalty per unassigned request). Scheduling uses Cordeau's 3-step algorithm: forward pass → depot delay optimization → iterative pickup delay. Feasibility checks: time windows, capacity, precedence, ride time, route duration.
-- **initial_solution.py** — `build_initial_solution()`: greedy sequential cheapest-feasible insertion of all requests.
-- **solver.py** — `solve()` orchestrates ALNS: greedy construction → destroy/repair loop with Simulated Annealing acceptance + Roulette Wheel operator selection. Returns `SolverResult` with best/initial solutions and timing.
-- **operators/destroy/random_removal.py** — Removes 10-40% of assigned requests randomly.
-- **operators/repair/greedy_insertion.py** — Reinserts unassigned requests via iterative cheapest feasible insertion.
-
-### Instance Parsers (src/parsers/)
-
-- **cordeau.py** — Cordeau format: header `K n T Q L`, nodes ordered as depot/pickups/deliveries. Creates virtual end depot. Computes Euclidean distance matrix.
-- **li_lim.py** — Li & Lim PDPTW format: header `K Q S`, explicit pickup/delivery index fields. Different indexing mapped to unified DARPInstance.
-
-### Key Design Patterns
-
-- Operators receive `(DARPSolution, rng)` and return a new solution (ALNS library compatible)
-- Every route modification triggers feasibility validation (scheduling + constraint checks)
-- ALNS copies the solution before each destroy-repair cycle; accepts/rejects via SA criterion
-- Routes are lazily scheduled on-demand (not cached)
-- All `__init__.py` files are empty; use direct imports (e.g., `from src.parsers.cordeau import parse_cordeau`)
-
-### Test Data
-
-Cordeau pr01.txt (3 vehicles, 24 requests) is the primary test instance. Known optimal cost ≈ 190.02. Tests validate against published optimal routes.
-
-## Thesis Research Context
-
-This implements the methodology from the thesis "ML-Guided ALNS for the Dynamic Dial-a-Ride Problem".
-
-### Core Approach
-- Build ALNS with standard operators (random removal, worst removal, Shaw removal, greedy insertion, regret-2, regret-3)
-- Add three novel DARP-specific operators (see below)
-- Train offline ML model (Random Forest or Gradient Boosting) to replace roulette-wheel operator selection
-- Dynamic policy: attempt greedy insertion first, trigger ML-ALNS only if insertion fails
-
-### Three Novel Operators
-- **Ride-time critical removal**: remove requests with highest ratio of actual ride time to max allowed ride time
-- **Low-slack route removal**: remove requests from routes with lowest total schedule slack
-- **Slack-based insertion**: score positions by cost increase minus alpha * remaining slack after insertion
-
-### Evaluation
-- Dataset: Manhattan subset of NYC ridesharing instances (Fiedler & Mrkos 2023) (https://github.com/aicenter/Ridesharing_DARP_instances)
-- Sanity check only: Cordeau instances
-- Baselines: Insertion Heuristic, VGA, standard ALNS with roulette-wheel
-
-### Baselines and Comparison
-We evaluate in three levels. Level 1 (static, operator quality): compare all destroy-repair combinations (standard + new operators) on Cordeau instances to assess whether our new operators improve over standard ones. Level 2 (static, selection method): compare ML-guided selection vs. roulette-wheel vs. random selection vs. fixed-best-combo, measuring convergence speed and final solution quality. Level 3 (dynamic, full comparison): rolling-horizon experiments on NYC Manhattan instances, comparing against the Insertion Heuristic and VGA baselines provided in the dataset, plus our standard ALNS (same time budget).
+"ML-Guided ALNS for the Dynamic Dial-a-Ride Problem": standard ALNS + three novel operators (ride-time critical removal, low-slack route removal, slack-based insertion) + ML-guided operator selection. Evaluation on Manhattan NYC instances, sanity check on Cordeau.
