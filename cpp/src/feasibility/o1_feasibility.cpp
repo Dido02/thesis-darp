@@ -443,11 +443,12 @@ bool check_insertion_o1(const RouteAuxData& aux, int req, int k, int l,
     double s_d = dn.service_duration;
 
     // --- Capacity check ---
-    // The pickup adds 1 passenger from the insertion point to the delivery.
+    // The pickup adds demand from the insertion point to the delivery.
     // load[k-1] is the load just before the pickup; positions k..l-1 also carry the extra.
-    if (aux.load[k - 1] + 1 > Q) return false;
+    int pickup_demand = pn.demand;  // positive for pickups
+    if (aux.load[k - 1] + pickup_demand > Q) return false;
     if (k <= l - 1) {
-        if (aux.max_load[k][l - 1] + 1 > Q) return false;
+        if (aux.max_load[k][l - 1] + pickup_demand > Q) return false;
     }
 
     // ===================================================================

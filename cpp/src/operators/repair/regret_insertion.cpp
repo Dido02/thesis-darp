@@ -117,7 +117,7 @@ static std::vector<InsertionOption> find_best_insertions_classic(
             for (int d_pos = p_pos + 1; d_pos <= rlen; d_pos++) {
                 bool cap_ok = true;
                 for (int j = p_pos - 1; j < d_pos - 1; j++) {
-                    if (load_cache[j] + 1 > Q) { cap_ok = false; break; }
+                        if (load_cache[j] + nodes[pickup_id].demand > Q) { cap_ok = false; break; }
                 }
                 if (!cap_ok) continue;
 

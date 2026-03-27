@@ -183,9 +183,10 @@ static DARPSolution greedy_insertion_classic(const DARPSolution& sol, std::mt199
 
                     for (int d_pos = p_pos + 1; d_pos <= rlen; d_pos++) {
                         // Capacity filter
+                        int pickup_demand = nodes[pickup_id].demand;
                         bool cap_ok = true;
                         for (int j = p_pos - 1; j < d_pos - 1; j++) {
-                            if (load_cache[j] + 1 > Q) {
+                            if (load_cache[j] + pickup_demand > Q) {
                                 cap_ok = false;
                                 break;
                             }

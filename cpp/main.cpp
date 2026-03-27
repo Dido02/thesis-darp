@@ -1,5 +1,6 @@
 #include "instance.h"
 #include "parsers/cordeau.h"
+#include "parsers/li_lim.h"
 #include "solver.h"
 
 #include <iostream>
@@ -73,7 +74,9 @@ int main(int argc, char* argv[]) {
     }
 
     std::cout << "Loading instance: " << instance_path << "\n";
-    DARPInstance inst = parse_cordeau(instance_path);
+    bool is_li_lim = instance_path.find("li_lim") != std::string::npos;
+    DARPInstance inst = is_li_lim ? parse_li_lim(instance_path)
+                                  : parse_cordeau(instance_path);
     std::cout << "  n=" << inst.num_requests
               << ", K=" << inst.num_vehicles
               << ", Q=" << inst.vehicle_capacity
