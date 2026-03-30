@@ -25,7 +25,7 @@ static DARPSolution repair_ride_times(const DARPSolution& sol, bool verbose) {
     for (const auto& route : sol.routes) {
         auto sched = sol.compute_route_schedule(route);
         for (const auto& [req, rt] : sched.ride_time) {
-            if (rt > inst.max_ride_time + EPS) {
+            if (rt > inst.max_ride_time_for(req) + EPS) {
                 to_remove.insert(req);
             }
         }
@@ -83,7 +83,7 @@ static DARPSolution repair_ride_times(const DARPSolution& sol, bool verbose) {
             const auto& route = repaired.routes[k];
             int rlen = static_cast<int>(route.size());
 
-            for (int p_pos = 1; p_pos < rlen; p_pos++) {
+            for (int p_pos = inst.route_start_offset(); p_pos < rlen; p_pos++) {
                 for (int d_pos = p_pos + 1; d_pos <= rlen; d_pos++) {
                     std::vector<int> candidate = route;
                     candidate.insert(candidate.begin() + p_pos, pickup_id);
@@ -107,7 +107,7 @@ static DARPSolution repair_ride_times(const DARPSolution& sol, bool verbose) {
                     }
                     if (ok) {
                         for (const auto& [r, rt] : sched.ride_time) {
-                            if (rt > inst.max_ride_time + EPS) { ok = false; break; }
+                            if (rt > inst.max_ride_time_for(r) + EPS) { ok = false; break; }
                         }
                     }
                     if (ok) {

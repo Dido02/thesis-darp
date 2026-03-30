@@ -41,7 +41,7 @@ static std::vector<InsertionOption> find_best_insertions_o1(
         const auto& aux = aux_cache[r];
         int rlen = static_cast<int>(route.size());
 
-        for (int k_pos = 1; k_pos < rlen; k_pos++) {
+        for (int k_pos = inst.route_start_offset(); k_pos < rlen; k_pos++) {
             for (int l_pos = k_pos; l_pos < rlen; l_pos++) {
                 if (!check_insertion_o1(aux, req, k_pos, l_pos, inst))
                     continue;
@@ -110,7 +110,7 @@ static std::vector<InsertionOption> find_best_insertions_classic(
             load_cache[i] = load_cache[i - 1] + nodes[route[i]].demand;
         }
 
-        for (int p_pos = 1; p_pos < rlen; p_pos++) {
+        for (int p_pos = inst.route_start_offset(); p_pos < rlen; p_pos++) {
             double arr_pickup = depart_cache[p_pos - 1] + tt[route[p_pos - 1]][pickup_id];
             if (arr_pickup > nodes[pickup_id].latest + EPS) continue;
 

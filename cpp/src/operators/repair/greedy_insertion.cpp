@@ -77,7 +77,7 @@ static DARPSolution greedy_insertion_o1(const DARPSolution& sol, std::mt19937& r
                 //   p_pos: same as k_pos
                 //   d_pos: position after pickup inserted, = l_pos + 1
 
-                for (int k_pos = 1; k_pos < rlen; k_pos++) {
+                for (int k_pos = inst.route_start_offset(); k_pos < rlen; k_pos++) {
                     for (int l_pos = k_pos; l_pos < rlen; l_pos++) {
                         // O(1) feasibility check
                         if (!check_insertion_o1(aux, req, k_pos, l_pos, inst))
@@ -173,7 +173,7 @@ static DARPSolution greedy_insertion_classic(const DARPSolution& sol, std::mt199
                 const auto& load_cache = route_caches[k].load;
                 int rlen = static_cast<int>(route.size());
 
-                for (int p_pos = 1; p_pos < rlen; p_pos++) {
+                for (int p_pos = inst.route_start_offset(); p_pos < rlen; p_pos++) {
                     // Reachability filter
                     double arrival_at_pickup = depart_cache[p_pos - 1] +
                         tt[route[p_pos - 1]][pickup_id];

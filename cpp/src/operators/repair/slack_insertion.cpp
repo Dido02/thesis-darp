@@ -20,7 +20,7 @@ static double compute_route_slack(const std::vector<int>& route,
     const auto& nodes = inst.nodes;
     const auto& tt = inst.travel_time;
     int size = static_cast<int>(route.size());
-    if (size <= 2) return 0.0;
+    if (size <= inst.empty_route_size()) return 0.0;
 
     // Forward pass
     std::vector<double> tau(size);
@@ -104,7 +104,7 @@ static DARPSolution slack_insertion_o1(const DARPSolution& sol, std::mt19937& rn
                 const auto& aux = aux_cache[r];
                 int rlen = static_cast<int>(route.size());
 
-                for (int k_pos = 1; k_pos < rlen; k_pos++) {
+                for (int k_pos = inst.route_start_offset(); k_pos < rlen; k_pos++) {
                     for (int l_pos = k_pos; l_pos < rlen; l_pos++) {
                         if (!check_insertion_o1(aux, req, k_pos, l_pos, inst))
                             continue;
@@ -220,7 +220,7 @@ static DARPSolution slack_insertion_classic(const DARPSolution& sol, std::mt1993
                     load_cache[i] = load_cache[i - 1] + nodes[route[i]].demand;
                 }
 
-                for (int p_pos = 1; p_pos < rlen; p_pos++) {
+                for (int p_pos = inst.route_start_offset(); p_pos < rlen; p_pos++) {
                     double arr_pickup = depart_cache[p_pos - 1] + tt[route[p_pos - 1]][pickup_id];
                     if (arr_pickup > nodes[pickup_id].latest + EPS) continue;
 

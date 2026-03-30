@@ -39,7 +39,7 @@ DARPSolution low_slack_route_removal(const DARPSolution& sol, std::mt19937& rng)
     for (int k = 0; k < static_cast<int>(destroyed.routes.size()); k++) {
         const auto& route = destroyed.routes[k];
         int rlen = static_cast<int>(route.size());
-        if (rlen <= 2) continue;
+        if (rlen <= inst.empty_route_size()) continue;
 
         // Forward pass
         std::vector<double> tau(rlen);

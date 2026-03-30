@@ -101,7 +101,7 @@ std::pair<bool, std::string> check_full_optimizer(
                 if (pit != pickup_pos.end() && pit->second < i) {
                     // Pickup is before position i, so delaying i affects ride time
                     double current_ride = begin[j] - depart[pit->second];
-                    s_ij = inst.max_ride_time - current_ride;
+                    s_ij = inst.max_ride_time_for(req) - current_ride;
                 }
             }
             // Also handle route duration as dummy request:
@@ -133,9 +133,9 @@ std::pair<bool, std::string> check_full_optimizer(
             int del_pos = dit->second;
 
             double current_rt = begin[del_pos] - depart[i];
-            if (current_rt <= inst.max_ride_time + EPS) continue;
+            if (current_rt <= inst.max_ride_time_for(req) + EPS) continue;
 
-            double needed = current_rt - inst.max_ride_time;
+            double needed = current_rt - inst.max_ride_time_for(req);
 
             // Compute DARP-adapted FTS at position i
             double fi = compute_darp_fts(i);
@@ -191,11 +191,11 @@ std::pair<bool, std::string> check_full_optimizer(
                     std::to_string(req)};
             }
             double ride_time = begin[i] - depart[pit->second];
-            if (ride_time > inst.max_ride_time + EPS) {
+            if (ride_time > inst.max_ride_time_for(req) + EPS) {
                 std::ostringstream oss;
                 oss << "Ride time violated for request " << req
                     << ": ride_time=" << ride_time
-                    << " > max=" << inst.max_ride_time;
+                    << " > max=" << inst.max_ride_time_for(req);
                 return {false, oss.str()};
             }
         }

@@ -1,5 +1,6 @@
 #include "instance.h"
 #include "parsers/cordeau.h"
+#include "parsers/fiedler.h"
 #include "parsers/li_lim.h"
 #include "solver.h"
 
@@ -75,7 +76,10 @@ int main(int argc, char* argv[]) {
 
     std::cout << "Loading instance: " << instance_path << "\n";
     bool is_li_lim = instance_path.find("li_lim") != std::string::npos;
-    DARPInstance inst = is_li_lim ? parse_li_lim(instance_path)
+    bool is_fiedler = instance_path.find(".fiedler") != std::string::npos
+                   || instance_path.find("fiedler") != std::string::npos;
+    DARPInstance inst = is_fiedler ? parse_fiedler(instance_path)
+                      : is_li_lim ? parse_li_lim(instance_path)
                                   : parse_cordeau(instance_path);
     std::cout << "  n=" << inst.num_requests
               << ", K=" << inst.num_vehicles

@@ -14,8 +14,11 @@ DARPSolution::DARPSolution(const DARPInstance& inst)
     int depot_d = 2 * n + 1;
 
     routes.resize(inst.num_vehicles);
-    for (auto& route : routes) {
-        route = {0, depot_d};
+    for (int k = 0; k < inst.num_vehicles; k++) {
+        if (!inst.vehicle_start_nodes.empty())
+            routes[k] = {0, inst.vehicle_start_nodes[k], depot_d};
+        else
+            routes[k] = {0, depot_d};
     }
     for (int i = 1; i <= n; i++) {
         unassigned.insert(i);
@@ -41,14 +44,13 @@ RouteSchedule DARPSolution::compute_route_schedule(const std::vector<int>& route
     int n = inst.num_requests;
     int size = static_cast<int>(route.size());
 
-    if (size <= 2) {
-        return RouteSchedule{
-            {0.0, 0.0},
-            {0.0, 0.0},
-            {0.0, 0.0},
-            {0, 0},
-            {}
-        };
+    if (size <= inst.empty_route_size()) {
+        RouteSchedule empty;
+        empty.arrival_time.resize(size, 0.0);
+        empty.begin_service.resize(size, 0.0);
+        empty.departure_time.resize(size, 0.0);
+        empty.load.resize(size, 0);
+        return empty;
     }
 
     // --- Step 1: Forward pass (earliest feasible times) ---
@@ -114,9 +116,9 @@ RouteSchedule DARPSolution::compute_route_schedule(const std::vector<int>& route
             if (del_pos == -1) continue;
 
             double current_rt = begin[del_pos] - depart[i];
-            if (current_rt <= inst.max_ride_time + EPS) continue;
+            if (current_rt <= inst.max_ride_time_for(req) + EPS) continue;
 
-            double needed = current_rt - inst.max_ride_time;
+            double needed = current_rt - inst.max_ride_time_for(req);
 
             // Compute forward time slack at position i
             double fi = nodes[route[size - 1]].latest - begin[size - 1];
@@ -235,10 +237,10 @@ std::pair<bool, std::string> DARPSolution::is_feasible() const {
         }
 
         for (const auto& [req, rt] : sched.ride_time) {
-            if (rt > inst.max_ride_time + EPS) {
+            if (rt > inst.max_ride_time_for(req) + EPS) {
                 std::ostringstream oss;
                 oss << "Route " << k << ": Ride time violated for request " << req
-                    << ": ride_time=" << rt << " > max=" << inst.max_ride_time;
+                    << ": ride_time=" << rt << " > max=" << inst.max_ride_time_for(req);
                 return {false, oss.str()};
             }
         }

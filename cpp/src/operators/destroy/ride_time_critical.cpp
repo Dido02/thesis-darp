@@ -34,7 +34,7 @@ DARPSolution ride_time_critical_removal(const DARPSolution& sol, std::mt19937& r
         auto sched = destroyed.compute_route_schedule(route);
         for (const auto& [req, rt] : sched.ride_time) {
             if (!destroyed.unassigned.count(req)) {
-                double ratio = rt / inst.max_ride_time;
+                double ratio = rt / inst.max_ride_time_for(req);
                 ratios.push_back({ratio, req});
             }
         }
@@ -60,7 +60,7 @@ DARPSolution ride_time_critical_removal(const DARPSolution& sol, std::mt19937& r
             auto sched = destroyed.compute_route_schedule(route);
             for (const auto& [req, rt] : sched.ride_time) {
                 if (!destroyed.unassigned.count(req)) {
-                    current_ratios.push_back({rt / inst.max_ride_time, req});
+                    current_ratios.push_back({rt / inst.max_ride_time_for(req), req});
                 }
             }
         }

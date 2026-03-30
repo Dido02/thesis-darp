@@ -95,9 +95,9 @@ void compute_aeap(const std::vector<int>& route, const DARPInstance& inst,
             int d = dit->second;
 
             double ride = tau[d] - depart[i];
-            if (ride <= inst.max_ride_time + EPS) continue;
+            if (ride <= inst.max_ride_time_for(nid) + EPS) continue;
 
-            double excess = ride - inst.max_ride_time;
+            double excess = ride - inst.max_ride_time_for(nid);
 
             // Compute available waiting time between positions i+1 and d
             double wait_available = 0.0;
@@ -188,10 +188,11 @@ static void compute_alap_internal(const std::vector<int>& route, const DARPInsta
 
         // Ride-time tightening
         for (const auto& [p, d] : pd_pairs) {
+            int req = route[p];  // pickup node ID = request number
             double s_p = nodes[route[p]].service_duration;
             double ride = tau_bar[d] - (tau_bar[p] + s_p);
-            if (ride > inst.max_ride_time + EPS) {
-                double new_tb = tau_bar[p] + s_p + inst.max_ride_time;
+            if (ride > inst.max_ride_time_for(req) + EPS) {
+                double new_tb = tau_bar[p] + s_p + inst.max_ride_time_for(req);
                 if (new_tb < tau_bar[d] - EPS) {
                     tau_bar[d] = new_tb;
                     changed = true;
@@ -275,10 +276,11 @@ static void compute_alap_constrained_fast(
 
         // Ride-time tightening
         for (const auto& [p, d] : pd_pairs) {
+            int req = route[p];  // pickup node ID = request number
             double s_p = nodes[route[p]].service_duration;
             double ride = tau_bar_c[d] - (tau_bar_c[p] + s_p);
-            if (ride > inst.max_ride_time + EPS) {
-                double new_tb = tau_bar_c[p] + s_p + inst.max_ride_time;
+            if (ride > inst.max_ride_time_for(req) + EPS) {
+                double new_tb = tau_bar_c[p] + s_p + inst.max_ride_time_for(req);
                 if (new_tb < tau_bar_c[d] - EPS) {
                     tau_bar_c[d] = new_tb;
                     changed = true;
@@ -474,7 +476,7 @@ bool check_insertion_o1(const RouteAuxData& aux, int req, int k, int l,
 
         // Check ride time (in case TW tightening was not done)
         double ride = tau_d - dep_p;
-        if (ride > inst.max_ride_time + EPS) return false;
+        if (ride > inst.max_ride_time_for(req) + EPS) return false;
 
         // Alg2 Line 3 (with i- replacing i+): earliest service at vk+1
         double dep_d = tau_d + s_d;
@@ -637,9 +639,9 @@ bool check_insertion_o1(const RouteAuxData& aux, int req, int k, int l,
     tau_p = max_tau_p;
     double ride = tau_d - (tau_p + s_p);
 
-    if (ride > inst.max_ride_time + EPS) {
+    if (ride > inst.max_ride_time_for(req) + EPS) {
         // Line 16: needed delay
-        double delta_i = ride - inst.max_ride_time;
+        double delta_i = ride - inst.max_ride_time_for(req);
 
         // Recompute w for ride-time repair (same logic as above)
         double w_check;
@@ -774,8 +776,8 @@ std::pair<bool, std::string> check_alap_feasible(
             int d = dit->second;
             double s_p = nodes[route[p]].service_duration;
             double ride = tau_bar_raw[d] - (tau_bar_raw[p] + s_p);
-            if (ride > inst.max_ride_time + EPS) {
-                double new_tb = tau_bar_raw[p] + s_p + inst.max_ride_time;
+            if (ride > inst.max_ride_time_for(req) + EPS) {
+                double new_tb = tau_bar_raw[p] + s_p + inst.max_ride_time_for(req);
                 if (new_tb < tau_bar_raw[d] - EPS) {
                     tau_bar_raw[d] = new_tb;
                     changed = true;
