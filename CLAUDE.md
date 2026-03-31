@@ -11,10 +11,9 @@ ALNS solver for the Dial-a-Ride Problem (DARP). Two implementations:
 ## Current Focus: C++ O(1) Feasibility Check Debugging
 
 Implementing constant-time feasibility test from Gschwind & Drexl (2016). Status:
-- 62% false rejection rate (too conservative) — main bug
-- 0.4% false acceptance rate (too permissive) — secondary bug
-- compute_aeap produces infeasible schedules on some routes (tau > latest)
-- Preprocessing data (tau_bar, tau_bar_given, gamma, wait) verified correct by brute force
+- 0.97% false rejection rate (too conservative) — 57 of 5906 feasible insertions missed
+- 0.88% false acceptance rate (too permissive) — 52 of 5901 O(1) accepts are infeasible
+- 331184 total checks on pr03, 99.97% agreement with ALAP ground truth
 
 IMPORTANT: Always read docs/algorithms.md before modifying feasibility code. It documents the index mapping (paper 1-indexed → code 0-indexed) and travel time convention (paper includes service time, code does not).
 

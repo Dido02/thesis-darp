@@ -1,5 +1,10 @@
 .idea
 .venv
+.DS_Store
+.cache/
+.claude/
+.vscode/
+build/
 
 **/*.txt
 **/*.png
@@ -7,6 +12,8 @@
 __pycache__/
 *.pyc
 data
+docs
 results
 results2
 results_li_lim
+scripts/compare_feasibility.py

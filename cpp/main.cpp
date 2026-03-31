@@ -4,6 +4,7 @@
 #include "parsers/li_lim.h"
 #include "solver.h"
 
+#include <fstream>
 #include <iostream>
 #include <string>
 
@@ -21,7 +22,8 @@ static void print_usage(const char* prog) {
               << "  --selection METHOD   Operator selection: random, roulette (default: random)\n"
               << "  --sa-start TEMP      SA start temperature (default: 100)\n"
               << "  --sa-end TEMP        SA end temperature (default: 0.01)\n"
-              << "  --time-limit SECS    Stop after this many seconds (default: 0 = use iterations)\n";
+              << "  --time-limit SECS    Stop after this many seconds (default: 0 = use iterations)\n"
+              << "  --output-routes FILE Write route schedules to file for solution conversion\n";
 }
 
 int main(int argc, char* argv[]) {
@@ -35,6 +37,7 @@ int main(int argc, char* argv[]) {
     double time_limit = 0.0;
     double sa_start = 100.0;
     double sa_end = 0.01;
+    std::string output_routes_path;
 
     for (int i = 1; i < argc; i++) {
         std::string arg = argv[i];
@@ -63,6 +66,8 @@ int main(int argc, char* argv[]) {
             sa_end = std::stod(argv[++i]);
         } else if (arg == "--time-limit" && i + 1 < argc) {
             time_limit = std::stod(argv[++i]);
+        } else if (arg == "--output-routes" && i + 1 < argc) {
+            output_routes_path = argv[++i];
         } else if (arg == "--help" || arg == "-h") {
             print_usage(argv[0]);
             return 0;
@@ -115,6 +120,37 @@ int main(int argc, char* argv[]) {
             std::cout << route[i];
         }
         std::cout << "]\n";
+    }
+
+    // Write route schedules to file if requested
+    if (!output_routes_path.empty()) {
+        std::ofstream fout(output_routes_path);
+        if (!fout.is_open()) {
+            std::cerr << "Cannot open output file: " << output_routes_path << "\n";
+            return 1;
+        }
+        fout << "SOLUTION\n";
+        fout << "objective " << result.best.objective() << "\n";
+        fout << "travel_cost " << result.best.travel_cost() << "\n";
+        fout << "num_routes " << result.best.routes.size() << "\n";
+        fout << "num_requests " << inst.num_requests << "\n";
+        fout << "unassigned " << result.best.unassigned.size() << "\n";
+
+        for (int k = 0; k < static_cast<int>(result.best.routes.size()); k++) {
+            const auto& route = result.best.routes[k];
+            auto sched = result.best.compute_route_schedule(route);
+            fout << "ROUTE " << k << "\n";
+            fout << "size " << route.size() << "\n";
+            for (int i = 0; i < static_cast<int>(route.size()); i++) {
+                fout << route[i]
+                     << " " << sched.arrival_time[i]
+                     << " " << sched.begin_service[i]
+                     << " " << sched.departure_time[i]
+                     << " " << sched.load[i] << "\n";
+            }
+        }
+        fout.close();
+        std::cout << "\nRoute schedules written to: " << output_routes_path << "\n";
     }
 
     return 0;
