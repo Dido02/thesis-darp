@@ -38,6 +38,8 @@ def main():
     parser.add_argument("--time-limit", type=float, default=30, help="Time limit in seconds (default: 30)")
     parser.add_argument("--seed", type=int, default=42, help="Random seed (default: 42)")
     parser.add_argument("--feasibility", default="o1", help="Feasibility mode: o1, full, slack (default: o1)")
+    parser.add_argument("--penalty", type=float, default=10000, help="Unassigned request penalty (default: 1000)")
+    parser.add_argument("--init-sort", default="slack", help="Initial solution sort: slack, time, random, none (default: slack)")
     parser.add_argument("--skip-validate", action="store_true", help="Skip solution validation")
     args = parser.parse_args()
 
@@ -89,7 +91,7 @@ def main():
 
     # Step 2: Solve
     print(f"\n{'='*60}")
-    print(f"STEP 2: Solve (iterations={args.iterations}, time_limit={args.time_limit}s, seed={args.seed}, feasibility={args.feasibility})")
+    print(f"STEP 2: Solve (iterations={args.iterations}, time_limit={args.time_limit}s, seed={args.seed}, feasibility={args.feasibility}, penalty={args.penalty}, init_sort={args.init_sort})")
     print(f"{'='*60}")
     ret = subprocess.run([
         str(solver),
@@ -98,6 +100,8 @@ def main():
         "--feasibility", args.feasibility,
         "--time-limit", str(args.time_limit),
         "--seed", str(args.seed),
+        "--penalty", str(args.penalty),
+        "--init-sort", args.init_sort,
         "--output-routes", str(routes),
     ])
     if ret.returncode != 0:

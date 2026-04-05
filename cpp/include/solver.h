@@ -22,4 +22,6 @@ SolverResult solve(
     const std::string& destroy_config = "random",
     const std::string& repair_config = "greedy",
     const std::string& selection_config = "random",
-    double time_limit = 0.0);
+    double time_limit = 0.0,
+    double unassigned_penalty = 1000.0,
+    const std::string& init_sort = "slack");

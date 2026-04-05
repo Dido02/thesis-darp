@@ -227,29 +227,7 @@ def convert(routes_path: Path, instance_dir: Path, output_path: Path):
     dropped = []
     for i in range(n):
         if i not in served_requests:
-            r = requests[i]
-            dropped.append({
-                "index": i,
-                "pickup": {
-                    "id": i * 2,
-                    "request_index": i,
-                    "type": "pickup",
-                    "position": {"index": r['origin']},
-                    "min_time": int(r['time_s']),
-                    "max_time": int(r['time_s'] + delta),
-                    "service_duration": 0
-                },
-                "drop_off": {
-                    "id": i * 2 + 1,
-                    "request_index": i,
-                    "type": "drop_off",
-                    "position": {"index": r['dest']},
-                    "min_time": int(r['time_s'] + r['direct_tt']),
-                    "max_time": int(r['time_s'] + r['direct_tt'] + delta),
-                    "service_duration": 0
-                },
-                "min_travel_time": r['direct_tt']
-            })
+            dropped.append({"id": i})
 
     solution = {
         "cost": total_cost,

@@ -230,7 +230,9 @@ SolverResult solve(
     const std::string& destroy_config,
     const std::string& repair_config,
     const std::string& selection_config,
-    double time_limit) {
+    double time_limit,
+    double unassigned_penalty,
+    const std::string& init_sort) {
 
     using Clock = std::chrono::high_resolution_clock;
 
@@ -255,8 +257,9 @@ SolverResult solve(
 
     // Build initial solution
     auto t0 = Clock::now();
-    DARPSolution init_sol = build_initial_solution(instance, "o1");
+    DARPSolution init_sol = build_initial_solution(instance, "o1", init_sort, seed);
     init_sol.feasibility_mode = feasibility_mode;
+    init_sol.unassigned_penalty = unassigned_penalty;
     auto t1 = Clock::now();
     double construction_time = std::chrono::duration<double>(t1 - t0).count();
 

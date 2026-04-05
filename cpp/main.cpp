@@ -23,6 +23,8 @@ static void print_usage(const char* prog) {
               << "  --sa-start TEMP      SA start temperature (default: 100)\n"
               << "  --sa-end TEMP        SA end temperature (default: 0.01)\n"
               << "  --time-limit SECS    Stop after this many seconds (default: 0 = use iterations)\n"
+              << "  --penalty P          Unassigned request penalty (default: 1000)\n"
+              << "  --init-sort MODE     Initial solution sort: slack, time, random, none (default: slack)\n"
               << "  --output-routes FILE Write route schedules to file for solution conversion\n";
 }
 
@@ -37,6 +39,8 @@ int main(int argc, char* argv[]) {
     double time_limit = 0.0;
     double sa_start = 100.0;
     double sa_end = 0.01;
+    double penalty = 1000.0;
+    std::string init_sort = "slack";
     std::string output_routes_path;
 
     for (int i = 1; i < argc; i++) {
@@ -66,6 +70,10 @@ int main(int argc, char* argv[]) {
             sa_end = std::stod(argv[++i]);
         } else if (arg == "--time-limit" && i + 1 < argc) {
             time_limit = std::stod(argv[++i]);
+        } else if (arg == "--penalty" && i + 1 < argc) {
+            penalty = std::stod(argv[++i]);
+        } else if (arg == "--init-sort" && i + 1 < argc) {
+            init_sort = argv[++i];
         } else if (arg == "--output-routes" && i + 1 < argc) {
             output_routes_path = argv[++i];
         } else if (arg == "--help" || arg == "-h") {
@@ -95,7 +103,7 @@ int main(int argc, char* argv[]) {
     std::cout << "Feasibility mode: " << feasibility_mode << "\n";
     SolverResult result = solve(inst, iterations, sa_start, sa_end, seed, true,
                                 feasibility_mode, destroy_config, repair_config,
-                                selection_config, time_limit);
+                                selection_config, time_limit, penalty, init_sort);
 
     std::cout << "\nFinal objective: " << result.best.objective() << "\n";
     std::cout << "Travel cost:     " << result.best.travel_cost() << "\n";

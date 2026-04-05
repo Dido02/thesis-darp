@@ -162,8 +162,20 @@ def convert(instance_dir: Path, dm_path: Path, output_path: Path):
     max_time = max(r['time_s'] for r in requests)
     T = (max_time - min_time) + global_L + delta + 3600  # generous buffer
 
-    depot_earliest = min_time
+    # Vehicle start time from config (vehicles can depart before first request)
+    vehicle_start_time_str = config.get('vehicles', {}).get('start_time', None)
+    if vehicle_start_time_str:
+        # Parse "2022-04-05 17:52:00" -> seconds from midnight
+        from datetime import datetime
+        dt = datetime.strptime(str(vehicle_start_time_str), "%Y-%m-%d %H:%M:%S")
+        vehicle_start_s = dt.hour * 3600 + dt.minute * 60 + dt.second
+        depot_earliest = vehicle_start_s
+    else:
+        depot_earliest = min_time
+
     depot_latest = max_time + global_L + delta + 3600
+
+    print(f"  Vehicle start time: {depot_earliest:.0f}s (requests start at {min_time:.0f}s, gap={min_time - depot_earliest:.0f}s)")
 
     print(f"  Time range: {min_time:.0f}s - {max_time:.0f}s")
     print(f"  Global max ride time (L): {global_L:.0f}s")

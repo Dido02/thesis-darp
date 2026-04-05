@@ -4,4 +4,6 @@
 #include "solution.h"
 
 DARPSolution build_initial_solution(const DARPInstance& inst,
-                                     const std::string& feasibility_mode = "o1");
+                                     const std::string& feasibility_mode = "o1",
+                                     const std::string& sort_mode = "slack",
+                                     int seed = 42);

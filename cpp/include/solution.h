@@ -17,7 +17,7 @@ struct RouteSchedule {
 
 class DARPSolution {
 public:
-    static constexpr double UNASSIGNED_PENALTY = 1000.0;
+    double unassigned_penalty = 1000.0;
 
     const DARPInstance* instance;  // non-owning pointer, always valid
     std::vector<std::vector<int>> routes;

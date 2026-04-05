@@ -34,6 +34,7 @@ DARPSolution DARPSolution::copy() const {
     }
     sol.unassigned = unassigned;
     sol.feasibility_mode = feasibility_mode;
+    sol.unassigned_penalty = unassigned_penalty;
     return sol;
 }
 
@@ -282,7 +283,7 @@ double DARPSolution::objective() const {
             total += tt[route[i]][route[i + 1]];
         }
     }
-    total += static_cast<double>(unassigned.size()) * UNASSIGNED_PENALTY;
+    total += static_cast<double>(unassigned.size()) * unassigned_penalty;
     cached_obj_ = total;
     return total;
 }

@@ -4,6 +4,7 @@
 
 #include <algorithm>
 #include <limits>
+#include <random>
 #include <vector>
 
 static constexpr double EPS = 1e-6;
@@ -36,7 +37,9 @@ static void forward_pass(
 }
 
 DARPSolution build_initial_solution(const DARPInstance& inst,
-                                     const std::string& feasibility_mode) {
+                                     const std::string& feasibility_mode,
+                                     const std::string& sort_mode,
+                                     int seed) {
     DARPSolution sol(inst);
     sol.feasibility_mode = feasibility_mode;
     int n = inst.num_requests;
@@ -46,16 +49,29 @@ DARPSolution build_initial_solution(const DARPInstance& inst,
 
     bool use_o1 = (feasibility_mode == "o1");
 
-    // Sort requests by time window tightness (tightest first)
-    // Constrained requests get inserted first while routes have room
+    // Build request insertion order
     std::vector<int> request_order(n);
     for (int i = 0; i < n; i++) request_order[i] = i + 1;
-    std::sort(request_order.begin(), request_order.end(),
-        [&nodes](int a, int b) {
-            double slack_a = nodes[a].latest - nodes[a].earliest;
-            double slack_b = nodes[b].latest - nodes[b].earliest;
-            return slack_a < slack_b;
-        });
+
+    if (sort_mode == "slack") {
+        // Sort by time window tightness (tightest first)
+        std::sort(request_order.begin(), request_order.end(),
+            [&nodes](int a, int b) {
+                double slack_a = nodes[a].latest - nodes[a].earliest;
+                double slack_b = nodes[b].latest - nodes[b].earliest;
+                return slack_a < slack_b;
+            });
+    } else if (sort_mode == "time") {
+        // Sort by earliest pickup time
+        std::sort(request_order.begin(), request_order.end(),
+            [&nodes](int a, int b) {
+                return nodes[a].earliest < nodes[b].earliest;
+            });
+    } else if (sort_mode == "random") {
+        std::mt19937 rng(seed);
+        std::shuffle(request_order.begin(), request_order.end(), rng);
+    }
+    // sort_mode == "none" keeps the default 1..n order
 
     // Aux data cache for O(1) mode
     std::vector<RouteAuxData> aux_cache;
