@@ -11,24 +11,32 @@ static constexpr double WEIGHT_LOAD = 6.0;
 static constexpr int RANDOMIZATION_P = 9;
 
 // ---------------------------------------------------------------------------
-// Helper: remove a request (pickup + delivery) from its route
+// Helper: build request-to-route index
 // ---------------------------------------------------------------------------
-static void remove_request(DARPSolution& sol, int req) {
-    int pickup_id = req;
-    int delivery_id = req + sol.instance->num_requests;
-
-    for (auto& route : sol.routes) {
-        auto it_p = std::find(route.begin(), route.end(), pickup_id);
-        if (it_p != route.end()) {
-            route.erase(it_p);
-            auto it_d = std::find(route.begin(), route.end(), delivery_id);
-            if (it_d != route.end()) {
-                route.erase(it_d);
-            }
-            sol.unassigned.insert(req);
-            return;
+static std::vector<int> build_req_to_route(const DARPSolution& sol) {
+    int n = sol.instance->num_requests;
+    std::vector<int> req_route(n + 1, -1);
+    for (int r = 0; r < static_cast<int>(sol.routes.size()); r++) {
+        for (int nid : sol.routes[r]) {
+            if (nid >= 1 && nid <= n) req_route[nid] = r;
         }
     }
+    return req_route;
+}
+
+// ---------------------------------------------------------------------------
+// Helper: remove a request from a known route
+// ---------------------------------------------------------------------------
+static void remove_request(DARPSolution& sol, int req, int route_idx) {
+    int pickup_id = req;
+    int delivery_id = req + sol.instance->num_requests;
+    auto& route = sol.routes[route_idx];
+
+    auto it_p = std::find(route.begin(), route.end(), pickup_id);
+    if (it_p != route.end()) route.erase(it_p);
+    auto it_d = std::find(route.begin(), route.end(), delivery_id);
+    if (it_d != route.end()) route.erase(it_d);
+    sol.unassigned.insert(req);
 }
 
 // ---------------------------------------------------------------------------
@@ -81,15 +89,18 @@ DARPSolution shaw_removal(const DARPSolution& sol, std::mt19937& rng) {
     // Collect assigned requests
     std::vector<int> assigned;
     for (int i = 1; i <= n; i++) {
-        if (!destroyed.unassigned.count(i)) {
+        if (!destroyed.unassigned.count(i) && !destroyed.committed.count(i)) {
             assigned.push_back(i);
         }
     }
     if (assigned.empty()) return destroyed;
 
-    // Number to remove: 10-40%
-    int lo = std::max(1, static_cast<int>(assigned.size() * 0.10));
-    int hi = std::max(lo + 1, static_cast<int>(assigned.size() * 0.40) + 1);
+    // Number to remove: 10-40% (static), 5-15% (dynamic)
+    bool dynamic = !destroyed.committed.empty();
+    double lo_pct = dynamic ? 0.10 : 0.10;
+    double hi_pct = dynamic ? 0.25 : 0.40;
+    int lo = std::max(1, static_cast<int>(assigned.size() * lo_pct));
+    int hi = std::max(lo + 1, static_cast<int>(assigned.size() * hi_pct) + 1);
     std::uniform_int_distribution<int> dist(lo, hi - 1);
     int q = std::min(dist(rng), static_cast<int>(assigned.size()));
 
@@ -145,8 +156,12 @@ DARPSolution shaw_removal(const DARPSolution& sol, std::mt19937& rng) {
     // Sort by relatedness (ascending = most similar first)
     std::sort(relatedness.begin(), relatedness.end());
 
+    // Build request-to-route index
+    auto req_route = build_req_to_route(destroyed);
+
     // Remove seed request first
-    remove_request(destroyed, seed_req);
+    if (req_route[seed_req] >= 0)
+        remove_request(destroyed, seed_req, req_route[seed_req]);
     int removed = 1;
 
     // Remove most similar requests with randomization
@@ -158,8 +173,8 @@ DARPSolution shaw_removal(const DARPSolution& sol, std::mt19937& rng) {
         idx = std::min(idx, static_cast<int>(relatedness.size()) - 1);
 
         int req = relatedness[idx].second;
-        if (!destroyed.unassigned.count(req)) {
-            remove_request(destroyed, req);
+        if (!destroyed.unassigned.count(req) && req_route[req] >= 0) {
+            remove_request(destroyed, req, req_route[req]);
             removed++;
         }
 

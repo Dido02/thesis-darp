@@ -6,19 +6,16 @@
 
 static constexpr double EPS = 1e-6;
 
-static void remove_request(DARPSolution& sol, int req) {
+static void remove_request(DARPSolution& sol, int req, int route_idx) {
     int pickup_id = req;
     int delivery_id = req + sol.instance->num_requests;
-    for (auto& route : sol.routes) {
-        auto it_p = std::find(route.begin(), route.end(), pickup_id);
-        if (it_p != route.end()) {
-            route.erase(it_p);
-            auto it_d = std::find(route.begin(), route.end(), delivery_id);
-            if (it_d != route.end()) route.erase(it_d);
-            sol.unassigned.insert(req);
-            return;
-        }
-    }
+    auto& route = sol.routes[route_idx];
+
+    auto it_p = std::find(route.begin(), route.end(), pickup_id);
+    if (it_p != route.end()) route.erase(it_p);
+    auto it_d = std::find(route.begin(), route.end(), delivery_id);
+    if (it_d != route.end()) route.erase(it_d);
+    sol.unassigned.insert(req);
 }
 
 DARPSolution low_slack_route_removal(const DARPSolution& sol, std::mt19937& rng) {
@@ -94,13 +91,16 @@ DARPSolution low_slack_route_removal(const DARPSolution& sol, std::mt19937& rng)
         static_cast<int>(route_slacks.size()),
         std::uniform_int_distribution<int>(1, 2)(rng));
 
-    // Number to remove total: 10-40% of all assigned
+    // Number to remove total: 10-40% (static), 5-15% (dynamic)
     int total_assigned = 0;
     for (int i = 1; i <= n; i++) {
         if (!destroyed.unassigned.count(i)) total_assigned++;
     }
-    int lo = std::max(1, static_cast<int>(total_assigned * 0.10));
-    int hi = std::max(lo + 1, static_cast<int>(total_assigned * 0.40) + 1);
+    bool dynamic = !destroyed.committed.empty();
+    double lo_pct = dynamic ? 0.10 : 0.10;
+    double hi_pct = dynamic ? 0.25 : 0.40;
+    int lo = std::max(1, static_cast<int>(total_assigned * lo_pct));
+    int hi = std::max(lo + 1, static_cast<int>(total_assigned * hi_pct) + 1);
     std::uniform_int_distribution<int> q_dist(lo, hi - 1);
     int q = std::min(q_dist(rng), total_assigned);
 
@@ -112,7 +112,7 @@ DARPSolution low_slack_route_removal(const DARPSolution& sol, std::mt19937& rng)
         // Collect requests in this route
         std::vector<int> reqs_in_route;
         for (int nid : route) {
-            if (nid >= 1 && nid <= n && !destroyed.unassigned.count(nid)) {
+            if (nid >= 1 && nid <= n && !destroyed.unassigned.count(nid) && !destroyed.committed.count(nid)) {
                 reqs_in_route.push_back(nid);
             }
         }
@@ -123,7 +123,7 @@ DARPSolution low_slack_route_removal(const DARPSolution& sol, std::mt19937& rng)
         int to_remove = std::min(static_cast<int>(reqs_in_route.size()), q - removed);
 
         for (int i = 0; i < to_remove; i++) {
-            remove_request(destroyed, reqs_in_route[i]);
+            remove_request(destroyed, reqs_in_route[i], route_idx);
             removed++;
         }
     }

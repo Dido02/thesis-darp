@@ -35,7 +35,7 @@ def main():
     parser.add_argument("--delay", required=True, help="Max delay folder name (e.g., 03_min, 05_min, 10_min)")
     parser.add_argument("--start", default="18-00", help="Start time folder (default: 18-00)")
     parser.add_argument("--iterations", type=int, default=1000, help="ALNS iterations (default: 1000)")
-    parser.add_argument("--time-limit", type=float, default=30, help="Time limit in seconds (default: 30)")
+    parser.add_argument("--time-limit", type=float, default=0, help="Time limit in seconds (default: 30)")
     parser.add_argument("--seed", type=int, default=42, help="Random seed (default: 42)")
     parser.add_argument("--feasibility", default="o1", help="Feasibility mode: o1, full, slack (default: o1)")
     parser.add_argument("--penalty", type=float, default=10000, help="Unassigned request penalty (default: 1000)")

@@ -22,6 +22,8 @@ public:
     const DARPInstance* instance;  // non-owning pointer, always valid
     std::vector<std::vector<int>> routes;
     std::set<int> unassigned;
+    std::set<int> committed;              // frozen requests (dynamic DARP)
+    std::vector<int> min_insert_pos;      // per-route minimum insertion position (dynamic DARP)
     std::string feasibility_mode = "o1";  // "slack" or "full"
     mutable double cached_obj_ = -1.0;
 

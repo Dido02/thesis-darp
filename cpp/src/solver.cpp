@@ -312,7 +312,9 @@ SolverResult solve(
     double total_other_time = 0.0;
     auto prev_iter_end = solve_t0;
 
+    int final_iter = 0;
     for (int iter = 0; iter < max_iterations; iter++) {
+        final_iter = iter + 1;
 
         if (time_limit > 0.0) {
             auto now = Clock::now();
@@ -456,6 +458,142 @@ SolverResult solve(
         std::move(repaired),
         std::move(init_sol),
         construction_time,
-        solve_time
+        solve_time,
+        final_iter
+    };
+}
+
+// ---------------------------------------------------------------------------
+// Warm-start ALNS: use provided initial solution, skip construction
+// ---------------------------------------------------------------------------
+SolverResult solve_warm(
+    const DARPInstance& instance,
+    const DARPSolution& initial_solution,
+    int max_iterations,
+    double start_temperature,
+    double end_temperature,
+    int seed,
+    bool verbose,
+    const std::string& feasibility_mode,
+    const std::string& destroy_config,
+    const std::string& repair_config,
+    const std::string& selection_config,
+    double time_limit,
+    double unassigned_penalty) {
+
+    using Clock = std::chrono::high_resolution_clock;
+
+    std::mt19937 rng(seed);
+
+    OperatorRegistry registry = build_registry(destroy_config, repair_config, selection_config);
+
+    DARPSolution init_sol = initial_solution.copy();
+    init_sol.feasibility_mode = feasibility_mode;
+    init_sol.unassigned_penalty = unassigned_penalty;
+
+    // SA parameters — calibrated from initial solution cost
+    double travel = init_sol.travel_cost();
+    double sa_start_temp = (travel > 1e-6) ? 0.025 * travel : start_temperature;
+    double sa_end_temp = 0.065 * sa_start_temp;
+
+    double temperature = sa_start_temp;
+    double sa_step;
+    if (time_limit > 0.0) {
+        sa_step = 1.0;
+    } else {
+        sa_step = std::pow(sa_end_temp / sa_start_temp, 1.0 / max_iterations);
+    }
+
+    DARPSolution best = init_sol.copy();
+    double best_obj = best.objective();
+    DARPSolution current = init_sol.copy();
+    double current_obj = current.objective();
+
+    std::vector<int> destroy_count(registry.num_destroy(), 0);
+    std::vector<int> repair_count(registry.num_repair(), 0);
+
+    auto solve_t0 = Clock::now();
+    bool sa_calibrated = false;
+    int final_iter = 0;
+    double w_total_destroy_time = 0.0;
+    double w_total_repair_time = 0.0;
+
+    for (int iter = 0; iter < max_iterations; iter++) {
+        final_iter = iter + 1;
+
+        if (time_limit > 0.0) {
+            auto now = Clock::now();
+            double elapsed = std::chrono::duration<double>(now - solve_t0).count();
+            if (elapsed >= time_limit) break;
+
+            if (!sa_calibrated && iter == 10 && elapsed > 0.0) {
+                double iters_per_sec = 10.0 / elapsed;
+                int estimated_total = std::min(
+                    static_cast<int>(iters_per_sec * time_limit), max_iterations);
+                estimated_total = std::max(estimated_total, 100);
+                sa_step = std::pow(sa_end_temp / sa_start_temp, 1.0 / estimated_total);
+                temperature = sa_start_temp;
+                sa_calibrated = true;
+            }
+        }
+
+        auto [d_idx, destroy] = registry.select_destroy(rng);
+        auto [r_idx, repair] = registry.select_repair(rng);
+        destroy_count[d_idx]++;
+        repair_count[r_idx]++;
+
+        auto t_d0 = Clock::now();
+        DARPSolution destroyed = destroy(current, rng);
+        auto t_d1 = Clock::now();
+        DARPSolution candidate = repair(destroyed, rng);
+        auto t_d2 = Clock::now();
+        w_total_destroy_time += std::chrono::duration<double>(t_d1 - t_d0).count();
+        w_total_repair_time += std::chrono::duration<double>(t_d2 - t_d1).count();
+        double candidate_obj = candidate.objective();
+
+        double delta = candidate_obj - current_obj;
+        bool accept = false;
+        if (delta < -1e-6) {
+            accept = true;
+        } else {
+            std::uniform_real_distribution<double> u(0.0, 1.0);
+            if (u(rng) < std::exp(-delta / temperature)) accept = true;
+        }
+
+        double score = 0.0;
+        if (candidate_obj < best_obj - 1e-6) score = 20.0;
+        else if (delta < -1e-6) score = 10.0;
+        else if (accept) score = 5.0;
+
+        if (accept) {
+            current = std::move(candidate);
+            current_obj = current.objective();
+        }
+        if (current_obj < best_obj - 1e-6) {
+            best = current.copy();
+            best_obj = current_obj;
+        }
+
+        registry.update_weights(d_idx, r_idx, score);
+        temperature *= sa_step;
+    }
+
+    auto solve_t1 = Clock::now();
+    double solve_time = std::chrono::duration<double>(solve_t1 - solve_t0).count();
+
+    // Post-ALNS ride-time repair (same as static solver)
+    DARPSolution repaired = (feasibility_mode == "full")
+        ? best.copy()
+        : repair_ride_times(best, verbose);
+
+    return SolverResult{
+        std::move(repaired),
+        std::move(init_sol),
+        0.0,  // no construction time for warm start
+        solve_time,
+        final_iter,
+        w_total_destroy_time,
+        w_total_repair_time,
+        solve_time - w_total_destroy_time - w_total_repair_time
     };
 }

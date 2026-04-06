@@ -7,19 +7,27 @@
 static constexpr double EPS = 1e-6;
 static constexpr int RANDOMIZATION_P = 3;
 
-static void remove_request(DARPSolution& sol, int req) {
-    int pickup_id = req;
-    int delivery_id = req + sol.instance->num_requests;
-    for (auto& route : sol.routes) {
-        auto it_p = std::find(route.begin(), route.end(), pickup_id);
-        if (it_p != route.end()) {
-            route.erase(it_p);
-            auto it_d = std::find(route.begin(), route.end(), delivery_id);
-            if (it_d != route.end()) route.erase(it_d);
-            sol.unassigned.insert(req);
-            return;
+static std::vector<int> build_req_to_route(const DARPSolution& sol) {
+    int n = sol.instance->num_requests;
+    std::vector<int> req_route(n + 1, -1);
+    for (int r = 0; r < static_cast<int>(sol.routes.size()); r++) {
+        for (int nid : sol.routes[r]) {
+            if (nid >= 1 && nid <= n) req_route[nid] = r;
         }
     }
+    return req_route;
+}
+
+static void remove_request(DARPSolution& sol, int req, int route_idx) {
+    int pickup_id = req;
+    int delivery_id = req + sol.instance->num_requests;
+    auto& route = sol.routes[route_idx];
+
+    auto it_p = std::find(route.begin(), route.end(), pickup_id);
+    if (it_p != route.end()) route.erase(it_p);
+    auto it_d = std::find(route.begin(), route.end(), delivery_id);
+    if (it_d != route.end()) route.erase(it_d);
+    sol.unassigned.insert(req);
 }
 
 DARPSolution ride_time_critical_removal(const DARPSolution& sol, std::mt19937& rng) {
@@ -28,12 +36,12 @@ DARPSolution ride_time_critical_removal(const DARPSolution& sol, std::mt19937& r
     int n = inst.num_requests;
 
     // Compute ride-time ratio for each assigned request
-    std::vector<std::pair<double, int>> ratios;  // (ratio, req)
+    std::vector<std::pair<double, int>> ratios;
 
     for (const auto& route : destroyed.routes) {
         auto sched = destroyed.compute_route_schedule(route);
         for (const auto& [req, rt] : sched.ride_time) {
-            if (!destroyed.unassigned.count(req)) {
+            if (!destroyed.unassigned.count(req) && !destroyed.committed.count(req)) {
                 double ratio = rt / inst.max_ride_time_for(req);
                 ratios.push_back({ratio, req});
             }
@@ -42,24 +50,27 @@ DARPSolution ride_time_critical_removal(const DARPSolution& sol, std::mt19937& r
 
     if (ratios.empty()) return destroyed;
 
-    // Sort descending by ratio (highest utilization first)
     std::sort(ratios.begin(), ratios.end(),
               [](const auto& a, const auto& b) { return a.first > b.first; });
 
-    // Number to remove: 10-40%
+    // Number to remove: 10-40% (static), 5-15% (dynamic)
     int total_assigned = static_cast<int>(ratios.size());
-    int lo = std::max(1, static_cast<int>(total_assigned * 0.10));
-    int hi = std::max(lo + 1, static_cast<int>(total_assigned * 0.40) + 1);
+    bool dynamic = !destroyed.committed.empty();
+    double lo_pct = dynamic ? 0.10 : 0.10;
+    double hi_pct = dynamic ? 0.25 : 0.40;
+    int lo = std::max(1, static_cast<int>(total_assigned * lo_pct));
+    int hi = std::max(lo + 1, static_cast<int>(total_assigned * hi_pct) + 1);
     std::uniform_int_distribution<int> dist(lo, hi - 1);
     int q = std::min(dist(rng), total_assigned);
 
     for (int removed = 0; removed < q; removed++) {
-        // Recompute ratios for remaining requests
+        auto req_route = build_req_to_route(destroyed);
+
         std::vector<std::pair<double, int>> current_ratios;
         for (const auto& route : destroyed.routes) {
             auto sched = destroyed.compute_route_schedule(route);
             for (const auto& [req, rt] : sched.ride_time) {
-                if (!destroyed.unassigned.count(req)) {
+                if (!destroyed.unassigned.count(req) && !destroyed.committed.count(req)) {
                     current_ratios.push_back({rt / inst.max_ride_time_for(req), req});
                 }
             }
@@ -69,13 +80,14 @@ DARPSolution ride_time_critical_removal(const DARPSolution& sol, std::mt19937& r
         std::sort(current_ratios.begin(), current_ratios.end(),
                   [](const auto& a, const auto& b) { return a.first > b.first; });
 
-        // Randomized selection biased toward highest ratio
         std::uniform_real_distribution<double> u(0.0, 1.0);
         int idx = static_cast<int>(
             std::floor(std::pow(u(rng), RANDOMIZATION_P) * current_ratios.size()));
         idx = std::min(idx, static_cast<int>(current_ratios.size()) - 1);
 
-        remove_request(destroyed, current_ratios[idx].second);
+        int req = current_ratios[idx].second;
+        if (req_route[req] >= 0)
+            remove_request(destroyed, req, req_route[req]);
     }
 
     return destroyed;

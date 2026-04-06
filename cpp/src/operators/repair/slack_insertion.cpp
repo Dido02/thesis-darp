@@ -78,15 +78,11 @@ static DARPSolution slack_insertion_o1(const DARPSolution& sol, std::mt19937& rn
     const auto& nodes = inst.nodes;
     int n = inst.num_requests;
 
-    // Precompute aux data, baseline slack and baseline cost for all routes
+    // Lazy aux precomputation
     std::vector<RouteAuxData> aux_cache(repaired.routes.size());
-    std::vector<double> baseline_slack(repaired.routes.size());
-    std::vector<double> baseline_cost(repaired.routes.size());
-    for (int r = 0; r < static_cast<int>(repaired.routes.size()); r++) {
-        aux_cache[r] = precompute_route_aux(repaired.routes[r], inst);
-        baseline_slack[r] = compute_route_slack(repaired.routes[r], inst);
-        baseline_cost[r] = compute_route_cost(repaired.routes[r], inst);
-    }
+    std::vector<double> baseline_slack(repaired.routes.size(), 0.0);
+    std::vector<double> baseline_cost(repaired.routes.size(), 0.0);
+    std::vector<bool> aux_computed(repaired.routes.size(), false);
 
     while (!repaired.unassigned.empty()) {
         double best_score = std::numeric_limits<double>::infinity();
@@ -101,10 +97,30 @@ static DARPSolution slack_insertion_o1(const DARPSolution& sol, std::mt19937& rn
 
             for (int r = 0; r < static_cast<int>(repaired.routes.size()); r++) {
                 const auto& route = repaired.routes[r];
-                const auto& aux = aux_cache[r];
                 int rlen = static_cast<int>(route.size());
 
-                for (int k_pos = inst.route_start_offset(); k_pos < rlen; k_pos++) {
+                int min_pos = inst.route_start_offset();
+                if (!repaired.min_insert_pos.empty())
+                    min_pos = std::max(min_pos, repaired.min_insert_pos[r]);
+                if (min_pos >= rlen) continue;
+
+                // Reachability filter
+                double depart_at_prev = nodes[route[min_pos - 1]].earliest
+                                      + nodes[route[min_pos - 1]].service_duration;
+                if (depart_at_prev + tt[route[min_pos - 1]][pickup_id]
+                    > nodes[pickup_id].latest + EPS)
+                    continue;
+
+                // Lazy aux precomputation
+                if (!aux_computed[r]) {
+                    aux_cache[r] = precompute_route_aux(route, inst);
+                    baseline_slack[r] = compute_route_slack(route, inst);
+                    baseline_cost[r] = compute_route_cost(route, inst);
+                    aux_computed[r] = true;
+                }
+                const auto& aux = aux_cache[r];
+
+                for (int k_pos = min_pos; k_pos < rlen; k_pos++) {
                     for (int l_pos = k_pos; l_pos < rlen; l_pos++) {
                         if (!check_insertion_o1(aux, req, k_pos, l_pos, inst))
                             continue;
@@ -208,6 +224,18 @@ static DARPSolution slack_insertion_classic(const DARPSolution& sol, std::mt1993
                 const auto& route = repaired.routes[r];
                 int rlen = static_cast<int>(route.size());
 
+                int min_pos_c = inst.route_start_offset();
+                if (!repaired.min_insert_pos.empty())
+                    min_pos_c = std::max(min_pos_c, repaired.min_insert_pos[r]);
+                if (min_pos_c >= rlen) continue;
+
+                // Reachability filter
+                double depart_at_prev = nodes[route[min_pos_c - 1]].earliest
+                                      + nodes[route[min_pos_c - 1]].service_duration;
+                if (depart_at_prev + tt[route[min_pos_c - 1]][pickup_id]
+                    > nodes[pickup_id].latest + EPS)
+                    continue;
+
                 // Forward pass for filters
                 std::vector<double> depart_cache(rlen);
                 std::vector<int> load_cache(rlen);
@@ -220,7 +248,7 @@ static DARPSolution slack_insertion_classic(const DARPSolution& sol, std::mt1993
                     load_cache[i] = load_cache[i - 1] + nodes[route[i]].demand;
                 }
 
-                for (int p_pos = inst.route_start_offset(); p_pos < rlen; p_pos++) {
+                for (int p_pos = min_pos_c; p_pos < rlen; p_pos++) {
                     double arr_pickup = depart_cache[p_pos - 1] + tt[route[p_pos - 1]][pickup_id];
                     if (arr_pickup > nodes[pickup_id].latest + EPS) continue;
 

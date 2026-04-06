@@ -3,6 +3,7 @@
 #include "parsers/fiedler.h"
 #include "parsers/li_lim.h"
 #include "solver.h"
+#include "dynamic_solver.h"
 
 #include <fstream>
 #include <iostream>
@@ -14,18 +15,53 @@ static void print_usage(const char* prog) {
               << "\nOptions:\n"
               << "  --iterations N       Number of ALNS iterations (default: 1000)\n"
               << "  --seed S             Random seed (default: 42)\n"
-              << "  --feasibility MODE   Feasibility check: slack, full, o1 (default: slack)\n"
-              << "  --destroy OPS        Comma-separated destroy operators (default: random,worst)\n"
-              << "                       Available: random, worst\n"
-              << "  --repair OPS         Comma-separated repair operators (default: greedy)\n"
-              << "                       Available: greedy\n"
-              << "  --selection METHOD   Operator selection: random, roulette (default: random)\n"
+              << "  --feasibility MODE   Feasibility check: slack, full, o1 (default: o1)\n"
+              << "  --destroy OPS        Comma-separated destroy operators\n"
+              << "  --repair OPS         Comma-separated repair operators\n"
+              << "  --selection METHOD   Operator selection: random, roulette (default: roulette)\n"
               << "  --sa-start TEMP      SA start temperature (default: 100)\n"
               << "  --sa-end TEMP        SA end temperature (default: 0.01)\n"
               << "  --time-limit SECS    Stop after this many seconds (default: 0 = use iterations)\n"
               << "  --penalty P          Unassigned request penalty (default: 1000)\n"
               << "  --init-sort MODE     Initial solution sort: slack, time, random, none (default: slack)\n"
-              << "  --output-routes FILE Write route schedules to file for solution conversion\n";
+              << "  --output-routes FILE Write route schedules to file for solution conversion\n"
+              << "\nDynamic DARP options:\n"
+              << "  --dynamic            Enable rolling horizon dynamic mode\n"
+              << "  --epoch-length SECS  Epoch length in sim seconds (default: 30, time-based trigger)\n"
+              << "  --epoch-requests N   Epoch trigger after N new requests (overrides --epoch-length)\n"
+              << "  --epoch-budget-ms MS ALNS wall-clock budget per epoch in ms (default: 5000)\n";
+}
+
+// Write route schedules to file (shared by static and dynamic paths)
+static void write_route_schedules(const DARPSolution& sol, const DARPInstance& inst,
+                                   const std::string& path) {
+    std::ofstream fout(path);
+    if (!fout.is_open()) {
+        std::cerr << "Cannot open output file: " << path << "\n";
+        return;
+    }
+    fout << "SOLUTION\n";
+    fout << "objective " << sol.objective() << "\n";
+    fout << "travel_cost " << sol.travel_cost() << "\n";
+    fout << "num_routes " << sol.routes.size() << "\n";
+    fout << "num_requests " << inst.num_requests << "\n";
+    fout << "unassigned " << sol.unassigned.size() << "\n";
+
+    for (int k = 0; k < static_cast<int>(sol.routes.size()); k++) {
+        const auto& route = sol.routes[k];
+        auto sched = sol.compute_route_schedule(route);
+        fout << "ROUTE " << k << "\n";
+        fout << "size " << route.size() << "\n";
+        for (int i = 0; i < static_cast<int>(route.size()); i++) {
+            fout << route[i]
+                 << " " << sched.arrival_time[i]
+                 << " " << sched.begin_service[i]
+                 << " " << sched.departure_time[i]
+                 << " " << sched.load[i] << "\n";
+        }
+    }
+    fout.close();
+    std::cout << "\nRoute schedules written to: " << path << "\n";
 }
 
 int main(int argc, char* argv[]) {
@@ -42,6 +78,12 @@ int main(int argc, char* argv[]) {
     double penalty = 1000.0;
     std::string init_sort = "slack";
     std::string output_routes_path;
+
+    // Dynamic mode options
+    bool dynamic_mode = false;
+    double epoch_length = 30.0;
+    int epoch_requests = -1;  // -1 = not set, use time-based
+    double epoch_budget_ms = 5000.0;
 
     for (int i = 1; i < argc; i++) {
         std::string arg = argv[i];
@@ -76,6 +118,14 @@ int main(int argc, char* argv[]) {
             init_sort = argv[++i];
         } else if (arg == "--output-routes" && i + 1 < argc) {
             output_routes_path = argv[++i];
+        } else if (arg == "--dynamic") {
+            dynamic_mode = true;
+        } else if (arg == "--epoch-length" && i + 1 < argc) {
+            epoch_length = std::stod(argv[++i]);
+        } else if (arg == "--epoch-requests" && i + 1 < argc) {
+            epoch_requests = std::stoi(argv[++i]);
+        } else if (arg == "--epoch-budget-ms" && i + 1 < argc) {
+            epoch_budget_ms = std::stod(argv[++i]);
         } else if (arg == "--help" || arg == "-h") {
             print_usage(argv[0]);
             return 0;
@@ -100,65 +150,74 @@ int main(int argc, char* argv[]) {
               << ", L=" << inst.max_ride_time
               << ", T=" << inst.max_route_duration << "\n";
 
-    std::cout << "Feasibility mode: " << feasibility_mode << "\n";
-    SolverResult result = solve(inst, iterations, sa_start, sa_end, seed, true,
-                                feasibility_mode, destroy_config, repair_config,
-                                selection_config, time_limit, penalty, init_sort);
-
-    std::cout << "\nFinal objective: " << result.best.objective() << "\n";
-    std::cout << "Travel cost:     " << result.best.travel_cost() << "\n";
-    std::cout << "Unassigned:      " << result.best.unassigned.size() << "\n";
-    std::cout << "Construction:    " << result.construction_time << "s\n";
-    std::cout << "Solve time:      " << result.solve_time << "s\n";
-
-    // Feasibility check
-    auto [feasible, reason] = result.best.is_feasible();
-    std::cout << "Feasible:        " << (feasible ? "yes" : "no") << "\n";
-    if (!feasible) {
-        std::cout << "Reason:          " << reason << "\n";
-    }
-
-    // Print routes
-    std::cout << "\nRoutes:\n";
-    for (int k = 0; k < static_cast<int>(result.best.routes.size()); k++) {
-        const auto& route = result.best.routes[k];
-        std::cout << "  R" << k << ": [";
-        for (int i = 0; i < static_cast<int>(route.size()); i++) {
-            if (i > 0) std::cout << ", ";
-            std::cout << route[i];
+    if (dynamic_mode) {
+        // ---- Dynamic DARP mode ----
+        EpochConfig ec;
+        if (epoch_requests > 0) {
+            ec.trigger = EpochConfig::REQUEST_COUNT;
+            ec.epoch_request_count = epoch_requests;
+        } else {
+            ec.trigger = EpochConfig::TIME_BASED;
+            ec.epoch_length = epoch_length;
         }
-        std::cout << "]\n";
-    }
+        ec.epoch_budget_ms = epoch_budget_ms;
 
-    // Write route schedules to file if requested
-    if (!output_routes_path.empty()) {
-        std::ofstream fout(output_routes_path);
-        if (!fout.is_open()) {
-            std::cerr << "Cannot open output file: " << output_routes_path << "\n";
-            return 1;
+        SolverParams sp;
+        // In dynamic mode, time budget controls epoch length — use high iteration cap
+        sp.max_iterations = 1000000;
+        sp.sa_start = sa_start;
+        sp.sa_end = sa_end;
+        sp.seed = seed;
+        sp.feasibility_mode = feasibility_mode;
+        sp.destroy_config = destroy_config;
+        sp.repair_config = repair_config;
+        sp.selection_config = selection_config;
+        sp.unassigned_penalty = penalty;
+
+        DynamicSolver dynamic_solver(inst, ec, sp, true);
+        DynamicResult result = dynamic_solver.run();
+
+        // Write route schedules if requested
+        if (!output_routes_path.empty()) {
+            write_route_schedules(result.final_solution, inst, output_routes_path);
         }
-        fout << "SOLUTION\n";
-        fout << "objective " << result.best.objective() << "\n";
-        fout << "travel_cost " << result.best.travel_cost() << "\n";
-        fout << "num_routes " << result.best.routes.size() << "\n";
-        fout << "num_requests " << inst.num_requests << "\n";
-        fout << "unassigned " << result.best.unassigned.size() << "\n";
 
+    } else {
+        // ---- Static DARP mode (unchanged) ----
+        std::cout << "Feasibility mode: " << feasibility_mode << "\n";
+        SolverResult result = solve(inst, iterations, sa_start, sa_end, seed, true,
+                                    feasibility_mode, destroy_config, repair_config,
+                                    selection_config, time_limit, penalty, init_sort);
+
+        std::cout << "\nFinal objective: " << result.best.objective() << "\n";
+        std::cout << "Travel cost:     " << result.best.travel_cost() << "\n";
+        std::cout << "Unassigned:      " << result.best.unassigned.size() << "\n";
+        std::cout << "Construction:    " << result.construction_time << "s\n";
+        std::cout << "Solve time:      " << result.solve_time << "s\n";
+
+        // Feasibility check
+        auto [feasible, reason] = result.best.is_feasible();
+        std::cout << "Feasible:        " << (feasible ? "yes" : "no") << "\n";
+        if (!feasible) {
+            std::cout << "Reason:          " << reason << "\n";
+        }
+
+        // Print routes
+        std::cout << "\nRoutes:\n";
         for (int k = 0; k < static_cast<int>(result.best.routes.size()); k++) {
             const auto& route = result.best.routes[k];
-            auto sched = result.best.compute_route_schedule(route);
-            fout << "ROUTE " << k << "\n";
-            fout << "size " << route.size() << "\n";
+            std::cout << "  R" << k << ": [";
             for (int i = 0; i < static_cast<int>(route.size()); i++) {
-                fout << route[i]
-                     << " " << sched.arrival_time[i]
-                     << " " << sched.begin_service[i]
-                     << " " << sched.departure_time[i]
-                     << " " << sched.load[i] << "\n";
+                if (i > 0) std::cout << ", ";
+                std::cout << route[i];
             }
+            std::cout << "]\n";
         }
-        fout.close();
-        std::cout << "\nRoute schedules written to: " << output_routes_path << "\n";
+
+        // Write route schedules to file if requested
+        if (!output_routes_path.empty()) {
+            write_route_schedules(result.best, inst, output_routes_path);
+        }
     }
 
     return 0;

@@ -23,7 +23,8 @@ struct InsertionOption {
 // ---------------------------------------------------------------------------
 static std::vector<InsertionOption> find_best_insertions_o1(
     const DARPSolution& sol,
-    const std::vector<RouteAuxData>& aux_cache,
+    std::vector<RouteAuxData>& aux_cache,
+    std::vector<bool>& aux_computed,
     int req, int k_best) {
 
     const auto& inst = *sol.instance;
@@ -38,10 +39,28 @@ static std::vector<InsertionOption> find_best_insertions_o1(
 
     for (int r = 0; r < static_cast<int>(sol.routes.size()); r++) {
         const auto& route = sol.routes[r];
-        const auto& aux = aux_cache[r];
         int rlen = static_cast<int>(route.size());
 
-        for (int k_pos = inst.route_start_offset(); k_pos < rlen; k_pos++) {
+        int min_pos = inst.route_start_offset();
+        if (!sol.min_insert_pos.empty())
+            min_pos = std::max(min_pos, sol.min_insert_pos[r]);
+        if (min_pos >= rlen) continue;
+
+        // Reachability filter
+        double depart_at_prev = inst.nodes[route[min_pos - 1]].earliest
+                              + inst.nodes[route[min_pos - 1]].service_duration;
+        if (depart_at_prev + tt[route[min_pos - 1]][pickup_id]
+            > inst.nodes[pickup_id].latest + EPS)
+            continue;
+
+        // Lazy aux precomputation
+        if (!aux_computed[r]) {
+            aux_cache[r] = precompute_route_aux(route, inst);
+            aux_computed[r] = true;
+        }
+        const auto& aux = aux_cache[r];
+
+        for (int k_pos = min_pos; k_pos < rlen; k_pos++) {
             for (int l_pos = k_pos; l_pos < rlen; l_pos++) {
                 if (!check_insertion_o1(aux, req, k_pos, l_pos, inst))
                     continue;
@@ -98,6 +117,18 @@ static std::vector<InsertionOption> find_best_insertions_classic(
         const auto& route = sol.routes[r];
         int rlen = static_cast<int>(route.size());
 
+        int min_pos_c = inst.route_start_offset();
+        if (!sol.min_insert_pos.empty())
+            min_pos_c = std::max(min_pos_c, sol.min_insert_pos[r]);
+        if (min_pos_c >= rlen) continue;
+
+        // Reachability filter
+        double depart_at_prev = nodes[route[min_pos_c - 1]].earliest
+                              + nodes[route[min_pos_c - 1]].service_duration;
+        if (depart_at_prev + tt[route[min_pos_c - 1]][pickup_id]
+            > nodes[pickup_id].latest + EPS)
+            continue;
+
         // Forward pass for filters
         std::vector<double> depart_cache(rlen);
         std::vector<int> load_cache(rlen);
@@ -110,7 +141,7 @@ static std::vector<InsertionOption> find_best_insertions_classic(
             load_cache[i] = load_cache[i - 1] + nodes[route[i]].demand;
         }
 
-        for (int p_pos = inst.route_start_offset(); p_pos < rlen; p_pos++) {
+        for (int p_pos = min_pos_c; p_pos < rlen; p_pos++) {
             double arr_pickup = depart_cache[p_pos - 1] + tt[route[p_pos - 1]][pickup_id];
             if (arr_pickup > nodes[pickup_id].latest + EPS) continue;
 
@@ -169,11 +200,9 @@ static DARPSolution regret_k_o1(const DARPSolution& sol, std::mt19937& rng, int 
     const auto& inst = *repaired.instance;
     int n = inst.num_requests;
 
-    // Precompute aux data for all routes
+    // Lazy aux precomputation: compute on first access per route
     std::vector<RouteAuxData> aux_cache(repaired.routes.size());
-    for (int r = 0; r < static_cast<int>(repaired.routes.size()); r++) {
-        aux_cache[r] = precompute_route_aux(repaired.routes[r], inst);
-    }
+    std::vector<bool> aux_computed(repaired.routes.size(), false);
 
     while (!repaired.unassigned.empty()) {
         double best_regret = -std::numeric_limits<double>::infinity();
@@ -182,7 +211,7 @@ static DARPSolution regret_k_o1(const DARPSolution& sol, std::mt19937& rng, int 
         bool found_any = false;
 
         for (int req : repaired.unassigned) {
-            auto options = find_best_insertions_o1(repaired, aux_cache, req, k);
+            auto options = find_best_insertions_o1(repaired, aux_cache, aux_computed, req, k);
             if (options.empty()) continue;
 
             double regret = 0.0;

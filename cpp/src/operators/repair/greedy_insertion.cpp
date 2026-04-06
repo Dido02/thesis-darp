@@ -48,11 +48,9 @@ static DARPSolution greedy_insertion_o1(const DARPSolution& sol, std::mt19937& r
     const auto& nodes = inst.nodes;
     int n = inst.num_requests;
 
-    // Precompute aux data for all routes
+    // Lazy aux precomputation: compute on first access per route
     std::vector<RouteAuxData> aux_data(repaired.routes.size());
-    for (int k = 0; k < static_cast<int>(repaired.routes.size()); k++) {
-        aux_data[k] = precompute_route_aux(repaired.routes[k], inst);
-    }
+    std::vector<bool> aux_computed(repaired.routes.size(), false);
 
     while (!repaired.unassigned.empty()) {
         double best_cost = std::numeric_limits<double>::infinity();
@@ -67,17 +65,28 @@ static DARPSolution greedy_insertion_o1(const DARPSolution& sol, std::mt19937& r
 
             for (int k = 0; k < static_cast<int>(repaired.routes.size()); k++) {
                 const auto& route = repaired.routes[k];
-                const auto& aux = aux_data[k];
                 int rlen = static_cast<int>(route.size());
 
-                // O(1) check uses positions in the original (reduced) route:
-                //   k_pos: insert pickup before route[k_pos], range [1, rlen-1)
-                //   l_pos: insert delivery before route[l_pos], range [k_pos, rlen-1)
-                // The greedy insertion convention uses:
-                //   p_pos: same as k_pos
-                //   d_pos: position after pickup inserted, = l_pos + 1
+                int min_pos = inst.route_start_offset();
+                if (!repaired.min_insert_pos.empty())
+                    min_pos = std::max(min_pos, repaired.min_insert_pos[k]);
+                // Skip routes with no insertable positions
+                if (min_pos >= rlen) continue;
 
-                for (int k_pos = inst.route_start_offset(); k_pos < rlen; k_pos++) {
+                // Reachability filter
+                double depart_at_prev = nodes[route[min_pos - 1]].earliest
+                                      + nodes[route[min_pos - 1]].service_duration;
+                if (depart_at_prev + tt[route[min_pos - 1]][pickup_id] > nodes[pickup_id].latest + EPS)
+                    continue;
+
+                // Lazy aux precomputation
+                if (!aux_computed[k]) {
+                    aux_data[k] = precompute_route_aux(route, inst);
+                    aux_computed[k] = true;
+                }
+                const auto& aux = aux_data[k];
+
+                for (int k_pos = min_pos; k_pos < rlen; k_pos++) {
                     for (int l_pos = k_pos; l_pos < rlen; l_pos++) {
                         // O(1) feasibility check
                         if (!check_insertion_o1(aux, req, k_pos, l_pos, inst))
@@ -169,11 +178,22 @@ static DARPSolution greedy_insertion_classic(const DARPSolution& sol, std::mt199
 
             for (int k = 0; k < static_cast<int>(repaired.routes.size()); k++) {
                 const auto& route = repaired.routes[k];
-                const auto& depart_cache = route_caches[k].depart;
-                const auto& load_cache = route_caches[k].load;
                 int rlen = static_cast<int>(route.size());
 
-                for (int p_pos = inst.route_start_offset(); p_pos < rlen; p_pos++) {
+                int min_pos_c = inst.route_start_offset();
+                if (!repaired.min_insert_pos.empty())
+                    min_pos_c = std::max(min_pos_c, repaired.min_insert_pos[k]);
+                if (min_pos_c >= rlen) continue;
+
+                const auto& depart_cache = route_caches[k].depart;
+                const auto& load_cache = route_caches[k].load;
+
+                // Reachability filter
+                if (depart_cache[min_pos_c - 1] + tt[route[min_pos_c - 1]][pickup_id]
+                    > nodes[pickup_id].latest + EPS)
+                    continue;
+
+                for (int p_pos = min_pos_c; p_pos < rlen; p_pos++) {
                     // Reachability filter
                     double arrival_at_pickup = depart_cache[p_pos - 1] +
                         tt[route[p_pos - 1]][pickup_id];
