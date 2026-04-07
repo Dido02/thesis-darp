@@ -126,11 +126,7 @@ static DARPSolution slack_insertion_o1(const DARPSolution& sol, std::mt19937& rn
 
                 for (int k_pos = min_pos; k_pos < rlen; k_pos++) {
                     for (int l_pos = k_pos; l_pos < rlen; l_pos++) {
-                        DynamicStats::feas_checks++;
-                        if (!check_insertion_o1(aux, req, k_pos, l_pos, inst))
-                            continue;
-
-                        // Cost delta
+                        // Cost-bound pruning: compute cheap delta first
                         double delta;
                         if (k_pos == l_pos) {
                             delta = tt[route[k_pos - 1]][pickup_id]
@@ -145,6 +141,15 @@ static DARPSolution slack_insertion_o1(const DARPSolution& sol, std::mt19937& rn
                                   + tt[delivery_id][route[l_pos]]
                                   - tt[route[l_pos - 1]][route[l_pos]];
                         }
+                        // Cost-only lower bound on score (slack can only increase score
+                        // in the common case where inserting reduces slack)
+                        double norm_delta_lb = (baseline_cost[r] > EPS)
+                            ? delta / baseline_cost[r] : delta;
+                        if ((1.0 - ALPHA) * norm_delta_lb >= best_score) continue;
+
+                        DynamicStats::feas_checks++;
+                        if (!check_insertion_o1(aux, req, k_pos, l_pos, inst))
+                            continue;
 
                         // Build candidate to compute slack loss
                         std::vector<int> candidate = route;

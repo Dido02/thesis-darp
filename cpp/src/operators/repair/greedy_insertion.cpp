@@ -96,10 +96,7 @@ static DARPSolution greedy_insertion_o1(const DARPSolution& sol, std::mt19937& r
 
                 for (int k_pos = min_pos; k_pos < rlen; k_pos++) {
                     for (int l_pos = k_pos; l_pos < rlen; l_pos++) {
-                        DynamicStats::feas_checks++;
-                        if (!check_insertion_o1(aux, req, k_pos, l_pos, inst))
-                            continue;
-
+                        // Cost-bound pruning: compute cheap delta first
                         double delta;
                         if (k_pos == l_pos) {
                             delta = tt[route[k_pos - 1]][pickup_id]
@@ -114,6 +111,11 @@ static DARPSolution greedy_insertion_o1(const DARPSolution& sol, std::mt19937& r
                                   + tt[delivery_id][route[l_pos]]
                                   - tt[route[l_pos - 1]][route[l_pos]];
                         }
+                        if (delta >= best_cost) continue;
+
+                        DynamicStats::feas_checks++;
+                        if (!check_insertion_o1(aux, req, k_pos, l_pos, inst))
+                            continue;
 
                         if (delta < best_cost) {
                             best_cost = delta;

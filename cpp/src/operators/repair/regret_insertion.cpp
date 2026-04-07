@@ -67,10 +67,7 @@ static std::vector<InsertionOption> find_best_insertions_o1(
 
         for (int k_pos = min_pos; k_pos < rlen; k_pos++) {
             for (int l_pos = k_pos; l_pos < rlen; l_pos++) {
-                DynamicStats::feas_checks++;
-                if (!check_insertion_o1(aux, req, k_pos, l_pos, inst))
-                    continue;
-
+                // Cost-bound pruning: compute cheap delta first
                 double delta;
                 if (k_pos == l_pos) {
                     delta = tt[route[k_pos - 1]][pickup_id]
@@ -86,7 +83,15 @@ static std::vector<InsertionOption> find_best_insertions_o1(
                           - tt[route[l_pos - 1]][route[l_pos]];
                 }
 
-                // Only keep if it could be in top k_best
+                // Skip if can't be in top k_best
+                if (static_cast<int>(best.size()) >= k_best && delta >= best.back().cost)
+                    continue;
+
+                DynamicStats::feas_checks++;
+                if (!check_insertion_o1(aux, req, k_pos, l_pos, inst))
+                    continue;
+
+                // Insert into top k_best
                 if (static_cast<int>(best.size()) < k_best || delta < best.back().cost) {
                     best.push_back({delta, r, k_pos, l_pos + 1});
                     std::sort(best.begin(), best.end(),
