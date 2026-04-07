@@ -24,6 +24,8 @@ public:
     std::set<int> unassigned;
     std::set<int> committed;              // frozen requests (dynamic DARP)
     std::vector<int> min_insert_pos;      // per-route minimum insertion position (dynamic DARP)
+    std::vector<double> route_ready_time; // actual departure time at min_insert_pos[k] - 1 (dynamic DARP)
+    std::vector<int> route_ready_node;    // node id at min_insert_pos[k] - 1 (dynamic DARP)
     int top_n_routes = 0;                 // limit repair to N nearest routes per request (0 = no limit)
     std::string feasibility_mode = "o1";  // "slack" or "full"
     mutable double cached_obj_ = -1.0;

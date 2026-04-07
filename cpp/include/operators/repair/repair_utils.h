@@ -56,9 +56,19 @@ inline std::vector<int> build_candidate_routes(
             min_pos = std::max(min_pos, sol.min_insert_pos[k]);
         if (min_pos >= rlen) continue;
 
-        // Reachability: earliest departure from current position + travel to pickup
-        int prev_node = route[min_pos - 1];
-        double depart_at_prev = nodes[prev_node].earliest + nodes[prev_node].service_duration;
+        // Use cached real departure time if available (dynamic solver populates it
+        // via compute_min_insert_positions). Fall back to optimistic estimate
+        // for callers that don't populate the cache (static solver, tests).
+        double depart_at_prev;
+        int prev_node;
+        if (!sol.route_ready_time.empty()) {
+            depart_at_prev = sol.route_ready_time[k];
+            prev_node = sol.route_ready_node[k];
+        } else {
+            prev_node = route[min_pos - 1];
+            depart_at_prev = nodes[prev_node].earliest + nodes[prev_node].service_duration;
+        }
+
         double travel = tt[prev_node][pickup_id];
         if (depart_at_prev + travel > nodes[pickup_id].latest + 1e-6)
             continue;

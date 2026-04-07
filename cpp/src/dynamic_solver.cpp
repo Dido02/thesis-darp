@@ -270,6 +270,8 @@ void DynamicSolver::reject_expired_requests() {
 void DynamicSolver::compute_min_insert_positions() {
     int K = static_cast<int>(current_solution_.routes.size());
     current_solution_.min_insert_pos.resize(K);
+    current_solution_.route_ready_time.resize(K);
+    current_solution_.route_ready_node.resize(K);
 
     for (int k = 0; k < K; k++) {
         const auto& route = current_solution_.routes[k];
@@ -277,7 +279,13 @@ void DynamicSolver::compute_min_insert_positions() {
 
         // Empty routes (depot-[vstart]-depot) are always fully available
         if (rlen <= instance_.empty_route_size()) {
-            current_solution_.min_insert_pos[k] = instance_.route_start_offset();
+            int start_offset = instance_.route_start_offset();
+            current_solution_.min_insert_pos[k] = start_offset;
+            int depot_node = route[start_offset - 1];
+            current_solution_.route_ready_node[k] = depot_node;
+            current_solution_.route_ready_time[k] =
+                instance_.nodes[depot_node].earliest +
+                instance_.nodes[depot_node].service_duration;
             continue;
         }
 
@@ -296,8 +304,14 @@ void DynamicSolver::compute_min_insert_positions() {
             }
         }
         // Insert only after the last visited non-depot position
-        current_solution_.min_insert_pos[k] = std::max(
-            instance_.route_start_offset(), last_visited + 1);
+        int min_pos = std::max(instance_.route_start_offset(), last_visited + 1);
+        current_solution_.min_insert_pos[k] = min_pos;
+
+        // Cache the actual departure time and node at the position
+        // immediately before the insertion point.
+        int prev_idx = min_pos - 1;
+        current_solution_.route_ready_node[k] = route[prev_idx];
+        current_solution_.route_ready_time[k] = sched.departure_time[prev_idx];
     }
 }
 
