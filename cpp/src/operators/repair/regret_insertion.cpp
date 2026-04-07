@@ -1,8 +1,10 @@
 #include "operators/repair/regret_insertion.h"
+#include "operators/repair/repair_utils.h"
 #include "feasibility.h"
 #include "feasibility/o1_feasibility.h"
 
 #include <algorithm>
+#include <chrono>
 #include <limits>
 #include <vector>
 
@@ -37,7 +39,13 @@ static std::vector<InsertionOption> find_best_insertions_o1(
     std::vector<InsertionOption> best;
     best.reserve(k_best + 1);
 
-    for (int r = 0; r < static_cast<int>(sol.routes.size()); r++) {
+    using Clock = std::chrono::high_resolution_clock;
+
+    auto candidates = build_candidate_routes(sol, pickup_id, sol.top_n_routes);
+    DynamicStats::routes_checked += static_cast<int>(candidates.size());
+    DynamicStats::request_evals++;
+
+    for (int r : candidates) {
         const auto& route = sol.routes[r];
         int rlen = static_cast<int>(route.size());
 
@@ -46,22 +54,20 @@ static std::vector<InsertionOption> find_best_insertions_o1(
             min_pos = std::max(min_pos, sol.min_insert_pos[r]);
         if (min_pos >= rlen) continue;
 
-        // Reachability filter
-        double depart_at_prev = inst.nodes[route[min_pos - 1]].earliest
-                              + inst.nodes[route[min_pos - 1]].service_duration;
-        if (depart_at_prev + tt[route[min_pos - 1]][pickup_id]
-            > inst.nodes[pickup_id].latest + EPS)
-            continue;
-
         // Lazy aux precomputation
         if (!aux_computed[r]) {
+            auto t0 = Clock::now();
             aux_cache[r] = precompute_route_aux(route, inst);
             aux_computed[r] = true;
+            auto t1 = Clock::now();
+            DynamicStats::aux_precompute_ms +=
+                std::chrono::duration<double, std::milli>(t1 - t0).count();
         }
         const auto& aux = aux_cache[r];
 
         for (int k_pos = min_pos; k_pos < rlen; k_pos++) {
             for (int l_pos = k_pos; l_pos < rlen; l_pos++) {
+                DynamicStats::feas_checks++;
                 if (!check_insertion_o1(aux, req, k_pos, l_pos, inst))
                     continue;
 
@@ -113,7 +119,11 @@ static std::vector<InsertionOption> find_best_insertions_classic(
     std::vector<InsertionOption> best;
     best.reserve(k_best + 1);
 
-    for (int r = 0; r < static_cast<int>(sol.routes.size()); r++) {
+    auto candidates = build_candidate_routes(sol, pickup_id, sol.top_n_routes);
+    DynamicStats::routes_checked += static_cast<int>(candidates.size());
+    DynamicStats::request_evals++;
+
+    for (int r : candidates) {
         const auto& route = sol.routes[r];
         int rlen = static_cast<int>(route.size());
 
@@ -121,13 +131,6 @@ static std::vector<InsertionOption> find_best_insertions_classic(
         if (!sol.min_insert_pos.empty())
             min_pos_c = std::max(min_pos_c, sol.min_insert_pos[r]);
         if (min_pos_c >= rlen) continue;
-
-        // Reachability filter
-        double depart_at_prev = nodes[route[min_pos_c - 1]].earliest
-                              + nodes[route[min_pos_c - 1]].service_duration;
-        if (depart_at_prev + tt[route[min_pos_c - 1]][pickup_id]
-            > nodes[pickup_id].latest + EPS)
-            continue;
 
         // Forward pass for filters
         std::vector<double> depart_cache(rlen);

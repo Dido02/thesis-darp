@@ -35,6 +35,7 @@ DARPSolution DARPSolution::copy() const {
     sol.unassigned = unassigned;
     sol.committed = committed;
     sol.min_insert_pos = min_insert_pos;
+    sol.top_n_routes = top_n_routes;
     sol.feasibility_mode = feasibility_mode;
     sol.unassigned_penalty = unassigned_penalty;
     return sol;

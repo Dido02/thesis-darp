@@ -1,8 +1,10 @@
 #include "operators/repair/slack_insertion.h"
+#include "operators/repair/repair_utils.h"
 #include "feasibility.h"
 #include "feasibility/o1_feasibility.h"
 
 #include <algorithm>
+#include <chrono>
 #include <cmath>
 #include <limits>
 #include <vector>
@@ -95,7 +97,12 @@ static DARPSolution slack_insertion_o1(const DARPSolution& sol, std::mt19937& rn
             int pickup_id = req;
             int delivery_id = req + n;
 
-            for (int r = 0; r < static_cast<int>(repaired.routes.size()); r++) {
+            using Clock = std::chrono::high_resolution_clock;
+            auto candidates = build_candidate_routes(repaired, pickup_id, repaired.top_n_routes);
+            DynamicStats::routes_checked += static_cast<int>(candidates.size());
+            DynamicStats::request_evals++;
+
+            for (int r : candidates) {
                 const auto& route = repaired.routes[r];
                 int rlen = static_cast<int>(route.size());
 
@@ -104,24 +111,22 @@ static DARPSolution slack_insertion_o1(const DARPSolution& sol, std::mt19937& rn
                     min_pos = std::max(min_pos, repaired.min_insert_pos[r]);
                 if (min_pos >= rlen) continue;
 
-                // Reachability filter
-                double depart_at_prev = nodes[route[min_pos - 1]].earliest
-                                      + nodes[route[min_pos - 1]].service_duration;
-                if (depart_at_prev + tt[route[min_pos - 1]][pickup_id]
-                    > nodes[pickup_id].latest + EPS)
-                    continue;
-
                 // Lazy aux precomputation
                 if (!aux_computed[r]) {
+                    auto t0 = Clock::now();
                     aux_cache[r] = precompute_route_aux(route, inst);
                     baseline_slack[r] = compute_route_slack(route, inst);
                     baseline_cost[r] = compute_route_cost(route, inst);
                     aux_computed[r] = true;
+                    auto t1 = Clock::now();
+                    DynamicStats::aux_precompute_ms +=
+                        std::chrono::duration<double, std::milli>(t1 - t0).count();
                 }
                 const auto& aux = aux_cache[r];
 
                 for (int k_pos = min_pos; k_pos < rlen; k_pos++) {
                     for (int l_pos = k_pos; l_pos < rlen; l_pos++) {
+                        DynamicStats::feas_checks++;
                         if (!check_insertion_o1(aux, req, k_pos, l_pos, inst))
                             continue;
 
@@ -220,7 +225,11 @@ static DARPSolution slack_insertion_classic(const DARPSolution& sol, std::mt1993
             int pickup_id = req;
             int delivery_id = req + n;
 
-            for (int r = 0; r < static_cast<int>(repaired.routes.size()); r++) {
+            auto candidates = build_candidate_routes(repaired, pickup_id, repaired.top_n_routes);
+            DynamicStats::routes_checked += static_cast<int>(candidates.size());
+            DynamicStats::request_evals++;
+
+            for (int r : candidates) {
                 const auto& route = repaired.routes[r];
                 int rlen = static_cast<int>(route.size());
 
@@ -228,13 +237,6 @@ static DARPSolution slack_insertion_classic(const DARPSolution& sol, std::mt1993
                 if (!repaired.min_insert_pos.empty())
                     min_pos_c = std::max(min_pos_c, repaired.min_insert_pos[r]);
                 if (min_pos_c >= rlen) continue;
-
-                // Reachability filter
-                double depart_at_prev = nodes[route[min_pos_c - 1]].earliest
-                                      + nodes[route[min_pos_c - 1]].service_duration;
-                if (depart_at_prev + tt[route[min_pos_c - 1]][pickup_id]
-                    > nodes[pickup_id].latest + EPS)
-                    continue;
 
                 // Forward pass for filters
                 std::vector<double> depart_cache(rlen);

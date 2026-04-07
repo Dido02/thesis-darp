@@ -29,7 +29,9 @@ static void print_usage(const char* prog) {
               << "  --dynamic            Enable rolling horizon dynamic mode\n"
               << "  --epoch-length SECS  Epoch length in sim seconds (default: 30, time-based trigger)\n"
               << "  --epoch-requests N   Epoch trigger after N new requests (overrides --epoch-length)\n"
-              << "  --epoch-budget-ms MS ALNS wall-clock budget per epoch in ms (default: 5000)\n";
+              << "  --epoch-budget-ms MS ALNS wall-clock budget per epoch in ms (default: 5000)\n"
+              << "  --top-n-routes N   Limit repair to N nearest routes per request (default: 0 = all)\n"
+              << "  --dynamic-stats    Print per-epoch performance stats\n";
 }
 
 // Write route schedules to file (shared by static and dynamic paths)
@@ -84,6 +86,8 @@ int main(int argc, char* argv[]) {
     double epoch_length = 30.0;
     int epoch_requests = -1;  // -1 = not set, use time-based
     double epoch_budget_ms = 5000.0;
+    int top_n_routes = 0;     // 0 = no limit
+    bool dynamic_stats = false;
 
     for (int i = 1; i < argc; i++) {
         std::string arg = argv[i];
@@ -126,6 +130,10 @@ int main(int argc, char* argv[]) {
             epoch_requests = std::stoi(argv[++i]);
         } else if (arg == "--epoch-budget-ms" && i + 1 < argc) {
             epoch_budget_ms = std::stod(argv[++i]);
+        } else if (arg == "--top-n-routes" && i + 1 < argc) {
+            top_n_routes = std::stoi(argv[++i]);
+        } else if (arg == "--dynamic-stats") {
+            dynamic_stats = true;
         } else if (arg == "--help" || arg == "-h") {
             print_usage(argv[0]);
             return 0;
@@ -173,6 +181,8 @@ int main(int argc, char* argv[]) {
         sp.repair_config = repair_config;
         sp.selection_config = selection_config;
         sp.unassigned_penalty = penalty;
+        sp.top_n_routes = top_n_routes;
+        sp.dynamic_stats = dynamic_stats;
 
         DynamicSolver dynamic_solver(inst, ec, sp, true);
         DynamicResult result = dynamic_solver.run();

@@ -1,6 +1,7 @@
 #include "dynamic_solver.h"
 #include "solver.h"
 #include "feasibility/o1_feasibility.h"
+#include "operators/repair/repair_utils.h"
 
 #include <algorithm>
 #include <chrono>
@@ -27,6 +28,7 @@ DynamicSolver::DynamicSolver(const DARPInstance& instance,
     current_solution_.unassigned.clear();
     current_solution_.feasibility_mode = solver_params_.feasibility_mode;
     current_solution_.unassigned_penalty = solver_params_.unassigned_penalty;
+    current_solution_.top_n_routes = solver_params_.top_n_routes;
 
     // Build unreleased list sorted by release time (= pickup earliest time)
     for (int req = 1; req <= instance_.num_requests; req++) {
@@ -69,11 +71,9 @@ void DynamicSolver::greedy_insert_pending() {
     compute_min_insert_positions();
 
     if (current_solution_.feasibility_mode == "o1") {
-        // O(1) feasibility path
+        // O(1) feasibility path — lazy aux precomputation
         std::vector<RouteAuxData> aux_cache(current_solution_.routes.size());
-        for (int k = 0; k < static_cast<int>(current_solution_.routes.size()); k++) {
-            aux_cache[k] = precompute_route_aux(current_solution_.routes[k], instance_);
-        }
+        std::vector<bool> aux_computed(current_solution_.routes.size(), false);
 
         for (auto& [deadline, req] : urgent) {
             if (!pending_.count(req)) continue;
@@ -83,9 +83,12 @@ void DynamicSolver::greedy_insert_pending() {
             double best_cost = std::numeric_limits<double>::infinity();
             int best_route = -1, best_p = -1, best_d = -1;
 
-            for (int k = 0; k < static_cast<int>(current_solution_.routes.size()); k++) {
+            // Build candidate route list (top-N nearest)
+            auto candidates = build_candidate_routes(
+                current_solution_, pickup_id, current_solution_.top_n_routes);
+
+            for (int k : candidates) {
                 const auto& route = current_solution_.routes[k];
-                const auto& aux = aux_cache[k];
                 int rlen = static_cast<int>(route.size());
 
                 int min_pos = instance_.route_start_offset();
@@ -93,12 +96,12 @@ void DynamicSolver::greedy_insert_pending() {
                     min_pos = std::max(min_pos, current_solution_.min_insert_pos[k]);
                 if (min_pos >= rlen) continue;
 
-                // Reachability filter
-                double dep = nodes[route[min_pos - 1]].earliest
-                           + nodes[route[min_pos - 1]].service_duration;
-                if (dep + tt[route[min_pos - 1]][pickup_id]
-                    > nodes[pickup_id].latest + EPS)
-                    continue;
+                // Lazy aux precomputation
+                if (!aux_computed[k]) {
+                    aux_cache[k] = precompute_route_aux(route, instance_);
+                    aux_computed[k] = true;
+                }
+                const auto& aux = aux_cache[k];
 
                 for (int k_pos = min_pos; k_pos < rlen; k_pos++) {
                     for (int l_pos = k_pos; l_pos < rlen; l_pos++) {
@@ -320,6 +323,9 @@ EpochLog DynamicSolver::run_epoch_alns(int epoch_id) {
         epoch_sol.committed.insert(req);
     }
 
+    // Reset stats counters for this epoch
+    DynamicStats::reset();
+
     // Capture pre-ALNS objective
     double obj_before = epoch_sol.travel_cost();
 
@@ -379,6 +385,15 @@ EpochLog DynamicSolver::run_epoch_alns(int epoch_id) {
     log.repair_time_ms = result.total_repair_time * 1000.0;
     log.other_time_ms = wall_ms - log.destroy_time_ms - log.repair_time_ms;
 
+    // Performance stats
+    int iters = std::max(1, result.iterations_completed);
+    log.avg_routes_per_request = DynamicStats::request_evals > 0
+        ? static_cast<int>(DynamicStats::routes_checked / DynamicStats::request_evals) : 0;
+    log.avg_feas_checks = static_cast<int>(DynamicStats::feas_checks / iters);
+    log.aux_precompute_ms = DynamicStats::aux_precompute_ms;
+    log.greedy_preinsert_ms = greedy_preinsert_ms_;
+    greedy_preinsert_ms_ = 0.0;  // reset for next epoch
+
     return log;
 }
 
@@ -422,7 +437,12 @@ DynamicResult DynamicSolver::run() {
         release_requests(sim_clock_);
 
         // 2. Greedy pre-insertion of pending requests
-        greedy_insert_pending();
+        {
+            auto gt0 = Clock::now();
+            greedy_insert_pending();
+            auto gt1 = Clock::now();
+            greedy_preinsert_ms_ += std::chrono::duration<double, std::milli>(gt1 - gt0).count();
+        }
 
         // 3. Commit picked-up requests
         commit_picked_up_requests();
@@ -458,13 +478,21 @@ DynamicResult DynamicSolver::run() {
                           << " uncommitted=" << log.requests_uncommitted
                           << " pending=" << log.requests_pending
                           << " rejected=" << log.requests_rejected
-                          << " | iters=" << log.alns_iterations
+                          << "\n | iters=" << log.alns_iterations
                           << " obj=" << log.obj_before << "->" << log.obj_after
                           << " (" << (log.obj_before > 1e-6 ? -100.0*(log.obj_after - log.obj_before)/log.obj_before : 0.0) << "%)"
                           << " | destroy=" << static_cast<int>(log.destroy_time_ms)
                           << "ms repair=" << static_cast<int>(log.repair_time_ms)
                           << "ms other=" << static_cast<int>(log.other_time_ms)
-                          << "ms total=" << static_cast<int>(log.wall_clock_ms) << "ms\n";
+                          << "ms total=" << static_cast<int>(log.wall_clock_ms) << "ms";
+                if (solver_params_.dynamic_stats) {
+                    std::cout << " \n| routes/req=" << log.avg_routes_per_request
+                              << "/" << static_cast<int>(current_solution_.routes.size())
+                              << " feas_checks=" << log.avg_feas_checks << "/iter"
+                              << " aux=" << static_cast<int>(log.aux_precompute_ms) << "ms"
+                              << " greedy=" << static_cast<int>(log.greedy_preinsert_ms) << "ms\n";
+                }
+                std::cout << "\n";
             }
 
             if (epoch_config_.trigger == EpochConfig::TIME_BASED) {

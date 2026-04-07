@@ -31,6 +31,11 @@ struct EpochLog {
     double destroy_time_ms;
     double repair_time_ms;
     double other_time_ms;  // overhead (precompute, copy, SA, etc.)
+    // Stats (only when --dynamic-stats is enabled)
+    int avg_routes_per_request = 0;
+    int avg_feas_checks = 0;
+    double aux_precompute_ms = 0.0;
+    double greedy_preinsert_ms = 0.0;
 };
 
 struct DynamicResult {
@@ -53,6 +58,8 @@ struct SolverParams {
     std::string repair_config = "greedy,regret2,regret3,slack";
     std::string selection_config = "roulette";
     double unassigned_penalty = 1000.0;
+    int top_n_routes = 0;  // limit repair to N nearest routes (0 = no limit)
+    bool dynamic_stats = false;  // print per-epoch performance stats
 };
 
 class DynamicSolver {
@@ -79,6 +86,7 @@ private:
     DARPSolution current_solution_;
     double sim_clock_;
     int new_since_last_epoch_;       // for REQUEST_COUNT trigger
+    double greedy_preinsert_ms_ = 0.0;  // accumulated greedy pre-insertion time per epoch
 
     void release_requests(double up_to_time);
     void greedy_insert_pending();
