@@ -58,92 +58,146 @@ static DARPSolution greedy_insertion_o1(const DARPSolution& sol, std::mt19937& r
 
     DynamicStats::repair_calls++;
 
+    // Best-insertion cache: indexed by request id [0..n]
+    struct BestInsertion {
+        double cost;
+        int route_idx;
+        int p_pos;
+        int d_pos;
+        bool valid;
+    };
+
+    std::vector<BestInsertion> best_cache(n + 1);
+    for (int i = 0; i <= n; i++) {
+        best_cache[i].valid = false;
+        best_cache[i].cost = std::numeric_limits<double>::infinity();
+        best_cache[i].route_idx = -1;
+        best_cache[i].p_pos = -1;
+        best_cache[i].d_pos = -1;
+    }
+
+    // Lambda: scan all candidate routes for a single request, return best insertion
+    auto scan_request = [&](int req) -> BestInsertion {
+        BestInsertion result;
+        result.cost = std::numeric_limits<double>::infinity();
+        result.route_idx = -1;
+        result.p_pos = -1;
+        result.d_pos = -1;
+        result.valid = true;
+
+        int pickup_id = req;
+        int delivery_id = req + n;
+
+        auto candidates = build_candidate_routes(repaired, pickup_id, repaired.top_n_routes);
+        DynamicStats::routes_checked += static_cast<int>(candidates.size());
+        DynamicStats::request_evals++;
+
+        for (int k : candidates) {
+            const auto& route = repaired.routes[k];
+            int rlen = static_cast<int>(route.size());
+
+            int min_pos = inst.route_start_offset();
+            if (!repaired.min_insert_pos.empty())
+                min_pos = std::max(min_pos, repaired.min_insert_pos[k]);
+            if (min_pos >= rlen) continue;
+
+            if (!aux_computed[k]) {
+                auto t0 = Clock::now();
+                aux_data[k] = precompute_route_aux(route, inst);
+                aux_computed[k] = true;
+                auto t1 = Clock::now();
+                DynamicStats::aux_precompute_ms +=
+                    std::chrono::duration<double, std::milli>(t1 - t0).count();
+            }
+            const auto& aux = aux_data[k];
+
+            for (int k_pos = min_pos; k_pos < rlen; k_pos++) {
+                for (int l_pos = k_pos; l_pos < rlen; l_pos++) {
+                    double delta;
+                    if (k_pos == l_pos) {
+                        delta = tt[route[k_pos - 1]][pickup_id]
+                              + tt[pickup_id][delivery_id]
+                              + tt[delivery_id][route[k_pos]]
+                              - tt[route[k_pos - 1]][route[k_pos]];
+                    } else {
+                        delta = tt[route[k_pos - 1]][pickup_id]
+                              + tt[pickup_id][route[k_pos]]
+                              - tt[route[k_pos - 1]][route[k_pos]]
+                              + tt[route[l_pos - 1]][delivery_id]
+                              + tt[delivery_id][route[l_pos]]
+                              - tt[route[l_pos - 1]][route[l_pos]];
+                    }
+                    if (delta >= result.cost) continue;
+
+                    DynamicStats::feas_checks++;
+                    if (!check_insertion_o1(aux, req, k_pos, l_pos, inst))
+                        continue;
+
+                    result.cost = delta;
+                    result.route_idx = k;
+                    result.p_pos = k_pos;
+                    result.d_pos = l_pos + 1;
+                }
+            }
+        }
+
+        return result;
+    };
+
     while (!repaired.unassigned.empty()) {
+        // Step 1: Refresh cache for any invalidated entries
+        for (int req : repaired.unassigned) {
+            if (!best_cache[req].valid) {
+                best_cache[req] = scan_request(req);
+            }
+        }
+
+        // Step 2: Find the globally cheapest valid feasible entry
         double best_cost = std::numeric_limits<double>::infinity();
         int best_req = -1;
-        int best_route_idx = -1;
-        int best_p_pos = -1;
-        int best_d_pos = -1;
-
         for (int req : repaired.unassigned) {
-            int pickup_id = req;
-            int delivery_id = req + n;
-
-            // Build candidate route list (top-N nearest or all)
-            auto candidates = build_candidate_routes(repaired, pickup_id, repaired.top_n_routes);
-            DynamicStats::routes_checked += static_cast<int>(candidates.size());
-            DynamicStats::request_evals++;
-
-            for (int k : candidates) {
-                const auto& route = repaired.routes[k];
-                int rlen = static_cast<int>(route.size());
-
-                int min_pos = inst.route_start_offset();
-                if (!repaired.min_insert_pos.empty())
-                    min_pos = std::max(min_pos, repaired.min_insert_pos[k]);
-                if (min_pos >= rlen) continue;
-
-                // Lazy aux precomputation
-                if (!aux_computed[k]) {
-                    auto t0 = Clock::now();
-                    aux_data[k] = precompute_route_aux(route, inst);
-                    aux_computed[k] = true;
-                    auto t1 = Clock::now();
-                    DynamicStats::aux_precompute_ms +=
-                        std::chrono::duration<double, std::milli>(t1 - t0).count();
-                }
-                const auto& aux = aux_data[k];
-
-                for (int k_pos = min_pos; k_pos < rlen; k_pos++) {
-                    for (int l_pos = k_pos; l_pos < rlen; l_pos++) {
-                        // Cost-bound pruning: compute cheap delta first
-                        double delta;
-                        if (k_pos == l_pos) {
-                            delta = tt[route[k_pos - 1]][pickup_id]
-                                  + tt[pickup_id][delivery_id]
-                                  + tt[delivery_id][route[k_pos]]
-                                  - tt[route[k_pos - 1]][route[k_pos]];
-                        } else {
-                            delta = tt[route[k_pos - 1]][pickup_id]
-                                  + tt[pickup_id][route[k_pos]]
-                                  - tt[route[k_pos - 1]][route[k_pos]]
-                                  + tt[route[l_pos - 1]][delivery_id]
-                                  + tt[delivery_id][route[l_pos]]
-                                  - tt[route[l_pos - 1]][route[l_pos]];
-                        }
-                        if (delta >= best_cost) continue;
-
-                        DynamicStats::feas_checks++;
-                        if (!check_insertion_o1(aux, req, k_pos, l_pos, inst))
-                            continue;
-
-                        if (delta < best_cost) {
-                            best_cost = delta;
-                            best_req = req;
-                            best_route_idx = k;
-                            best_p_pos = k_pos;
-                            best_d_pos = l_pos + 1;
-                        }
-                    }
-                }
+            if (best_cache[req].valid &&
+                best_cache[req].route_idx >= 0 &&
+                best_cache[req].cost < best_cost) {
+                best_cost = best_cache[req].cost;
+                best_req = req;
             }
         }
 
         if (best_req < 0) break;
 
-        repaired.routes[best_route_idx].insert(
-            repaired.routes[best_route_idx].begin() + best_p_pos, best_req);
-        repaired.routes[best_route_idx].insert(
-            repaired.routes[best_route_idx].begin() + best_d_pos, best_req + n);
-        repaired.unassigned.erase(best_req);
+        const BestInsertion b = best_cache[best_req];
+        int k_star = b.route_idx;
 
-        // Recompute aux data for modified route
-        auto t0 = Clock::now();
-        aux_data[best_route_idx] = precompute_route_aux(
-            repaired.routes[best_route_idx], inst);
-        auto t1 = Clock::now();
-        DynamicStats::aux_precompute_ms +=
-            std::chrono::duration<double, std::milli>(t1 - t0).count();
+        // Step 3: Safety re-validation before commit
+        if (!check_insertion_o1(aux_data[k_star], best_req, b.p_pos, b.d_pos - 1, inst)) {
+            best_cache[best_req].valid = false;
+            continue;
+        }
+
+        // Step 4: Commit the insertion
+        repaired.routes[k_star].insert(
+            repaired.routes[k_star].begin() + b.p_pos, best_req);
+        repaired.routes[k_star].insert(
+            repaired.routes[k_star].begin() + b.d_pos, best_req + n);
+        repaired.unassigned.erase(best_req);
+        best_cache[best_req].valid = false;
+
+        // Step 5: Recompute aux for the modified route
+        {
+            auto t0 = Clock::now();
+            aux_data[k_star] = precompute_route_aux(repaired.routes[k_star], inst);
+            auto t1 = Clock::now();
+            DynamicStats::aux_precompute_ms +=
+                std::chrono::duration<double, std::milli>(t1 - t0).count();
+        }
+
+        // Step 6: Invalidate cache entries that pointed to the modified route
+        for (int req : repaired.unassigned) {
+            if (best_cache[req].valid && best_cache[req].route_idx == k_star) {
+                best_cache[req].valid = false;
+            }
+        }
     }
 
     return repaired;

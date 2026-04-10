@@ -80,120 +80,172 @@ static DARPSolution slack_insertion_o1(const DARPSolution& sol, std::mt19937& rn
     const auto& nodes = inst.nodes;
     int n = inst.num_requests;
 
+    using Clock = std::chrono::high_resolution_clock;
+
     // Lazy aux precomputation
     std::vector<RouteAuxData> aux_cache(repaired.routes.size());
     std::vector<double> baseline_slack(repaired.routes.size(), 0.0);
     std::vector<double> baseline_cost(repaired.routes.size(), 0.0);
     std::vector<bool> aux_computed(repaired.routes.size(), false);
 
-    while (!repaired.unassigned.empty()) {
-        double best_score = std::numeric_limits<double>::infinity();
-        int best_req = -1;
-        int best_route = -1;
-        int best_p = -1;
-        int best_d = -1;  // d_pos for actual insertion (l_pos + 1)
+    // Best-insertion cache: indexed by request id [0..n]
+    struct SlackCache {
+        double score;
+        int route_idx;
+        int p_pos;
+        int d_pos;
+        bool valid;
+    };
 
-        for (int req : repaired.unassigned) {
-            int pickup_id = req;
-            int delivery_id = req + n;
+    std::vector<SlackCache> slack_cache(n + 1);
+    for (int i = 0; i <= n; i++) {
+        slack_cache[i].valid = false;
+        slack_cache[i].score = std::numeric_limits<double>::infinity();
+        slack_cache[i].route_idx = -1;
+        slack_cache[i].p_pos = -1;
+        slack_cache[i].d_pos = -1;
+    }
 
-            using Clock = std::chrono::high_resolution_clock;
-            auto candidates = build_candidate_routes(repaired, pickup_id, repaired.top_n_routes);
-            DynamicStats::routes_checked += static_cast<int>(candidates.size());
-            DynamicStats::request_evals++;
+    // Lambda: scan all candidate routes for a single request, return best score/position
+    auto scan_request = [&](int req) -> SlackCache {
+        SlackCache result;
+        result.score = std::numeric_limits<double>::infinity();
+        result.route_idx = -1;
+        result.p_pos = -1;
+        result.d_pos = -1;
+        result.valid = true;
 
-            for (int r : candidates) {
-                const auto& route = repaired.routes[r];
-                int rlen = static_cast<int>(route.size());
+        int pickup_id = req;
+        int delivery_id = req + n;
 
-                int min_pos = inst.route_start_offset();
-                if (!repaired.min_insert_pos.empty())
-                    min_pos = std::max(min_pos, repaired.min_insert_pos[r]);
-                if (min_pos >= rlen) continue;
+        auto candidates = build_candidate_routes(repaired, pickup_id, repaired.top_n_routes);
+        DynamicStats::routes_checked += static_cast<int>(candidates.size());
+        DynamicStats::request_evals++;
 
-                // Lazy aux precomputation
-                if (!aux_computed[r]) {
-                    auto t0 = Clock::now();
-                    aux_cache[r] = precompute_route_aux(route, inst);
-                    baseline_slack[r] = compute_route_slack(route, inst);
-                    baseline_cost[r] = compute_route_cost(route, inst);
-                    aux_computed[r] = true;
-                    auto t1 = Clock::now();
-                    DynamicStats::aux_precompute_ms +=
-                        std::chrono::duration<double, std::milli>(t1 - t0).count();
-                }
-                const auto& aux = aux_cache[r];
+        for (int r : candidates) {
+            const auto& route = repaired.routes[r];
+            int rlen = static_cast<int>(route.size());
 
-                for (int k_pos = min_pos; k_pos < rlen; k_pos++) {
-                    for (int l_pos = k_pos; l_pos < rlen; l_pos++) {
-                        // Cost-bound pruning: compute cheap delta first
-                        double delta;
-                        if (k_pos == l_pos) {
-                            delta = tt[route[k_pos - 1]][pickup_id]
-                                  + tt[pickup_id][delivery_id]
-                                  + tt[delivery_id][route[k_pos]]
-                                  - tt[route[k_pos - 1]][route[k_pos]];
-                        } else {
-                            delta = tt[route[k_pos - 1]][pickup_id]
-                                  + tt[pickup_id][route[k_pos]]
-                                  - tt[route[k_pos - 1]][route[k_pos]]
-                                  + tt[route[l_pos - 1]][delivery_id]
-                                  + tt[delivery_id][route[l_pos]]
-                                  - tt[route[l_pos - 1]][route[l_pos]];
-                        }
-                        // Cost-only lower bound on score (slack can only increase score
-                        // in the common case where inserting reduces slack)
-                        double norm_delta_lb = (baseline_cost[r] > EPS)
-                            ? delta / baseline_cost[r] : delta;
-                        if ((1.0 - ALPHA) * norm_delta_lb >= best_score) continue;
+            int min_pos = inst.route_start_offset();
+            if (!repaired.min_insert_pos.empty())
+                min_pos = std::max(min_pos, repaired.min_insert_pos[r]);
+            if (min_pos >= rlen) continue;
 
-                        DynamicStats::feas_checks++;
-                        if (!check_insertion_o1(aux, req, k_pos, l_pos, inst))
-                            continue;
+            if (!aux_computed[r]) {
+                auto t0 = Clock::now();
+                aux_cache[r] = precompute_route_aux(route, inst);
+                baseline_slack[r] = compute_route_slack(route, inst);
+                baseline_cost[r] = compute_route_cost(route, inst);
+                aux_computed[r] = true;
+                auto t1 = Clock::now();
+                DynamicStats::aux_precompute_ms +=
+                    std::chrono::duration<double, std::milli>(t1 - t0).count();
+            }
+            const auto& aux = aux_cache[r];
 
-                        // Build candidate to compute slack loss
-                        std::vector<int> candidate = route;
-                        candidate.insert(candidate.begin() + k_pos, pickup_id);
-                        candidate.insert(candidate.begin() + l_pos + 1, delivery_id);
+            for (int k_pos = min_pos; k_pos < rlen; k_pos++) {
+                for (int l_pos = k_pos; l_pos < rlen; l_pos++) {
+                    double delta;
+                    if (k_pos == l_pos) {
+                        delta = tt[route[k_pos - 1]][pickup_id]
+                              + tt[pickup_id][delivery_id]
+                              + tt[delivery_id][route[k_pos]]
+                              - tt[route[k_pos - 1]][route[k_pos]];
+                    } else {
+                        delta = tt[route[k_pos - 1]][pickup_id]
+                              + tt[pickup_id][route[k_pos]]
+                              - tt[route[k_pos - 1]][route[k_pos]]
+                              + tt[route[l_pos - 1]][delivery_id]
+                              + tt[delivery_id][route[l_pos]]
+                              - tt[route[l_pos - 1]][route[l_pos]];
+                    }
+                    double norm_delta_lb = (baseline_cost[r] > EPS)
+                        ? delta / baseline_cost[r] : delta;
+                    if ((1.0 - ALPHA) * norm_delta_lb >= result.score) continue;
 
-                        double new_slack = compute_route_slack(candidate, inst);
-                        double slack_loss = baseline_slack[r] - new_slack;
+                    DynamicStats::feas_checks++;
+                    if (!check_insertion_o1(aux, req, k_pos, l_pos, inst))
+                        continue;
 
-                        // Normalized score: lower is better
-                        double norm_delta = (baseline_cost[r] > EPS)
-                            ? delta / baseline_cost[r] : delta;
-                        double norm_slack = (baseline_slack[r] > EPS)
-                            ? slack_loss / baseline_slack[r] : slack_loss;
-                        double score = (1.0 - ALPHA) * norm_delta + ALPHA * norm_slack;
+                    std::vector<int> candidate = route;
+                    candidate.insert(candidate.begin() + k_pos, pickup_id);
+                    candidate.insert(candidate.begin() + l_pos + 1, delivery_id);
 
-                        if (score < best_score) {
-                            // Full feasibility guard: only check when candidate beats best
-                            auto [feas, reason] = repaired.check_route_feasibility(candidate);
-                            if (!feas) continue;
+                    double new_slack = compute_route_slack(candidate, inst);
+                    double slack_loss = baseline_slack[r] - new_slack;
 
-                            best_score = score;
-                            best_req = req;
-                            best_route = r;
-                            best_p = k_pos;
-                            best_d = l_pos + 1;
-                        }
+                    double norm_delta = (baseline_cost[r] > EPS)
+                        ? delta / baseline_cost[r] : delta;
+                    double norm_slack = (baseline_slack[r] > EPS)
+                        ? slack_loss / baseline_slack[r] : slack_loss;
+                    double score = (1.0 - ALPHA) * norm_delta + ALPHA * norm_slack;
+
+                    if (score < result.score) {
+                        auto [feas, reason] = repaired.check_route_feasibility(candidate);
+                        if (!feas) continue;
+
+                        result.score = score;
+                        result.route_idx = r;
+                        result.p_pos = k_pos;
+                        result.d_pos = l_pos + 1;
                     }
                 }
             }
         }
 
+        return result;
+    };
+
+    while (!repaired.unassigned.empty()) {
+        // Step 1: Refresh cache for any invalidated entries
+        for (int req : repaired.unassigned) {
+            if (!slack_cache[req].valid) {
+                slack_cache[req] = scan_request(req);
+            }
+        }
+
+        // Step 2: Find lowest-score request
+        double best_score = std::numeric_limits<double>::infinity();
+        int best_req = -1;
+        for (int req : repaired.unassigned) {
+            if (slack_cache[req].valid &&
+                slack_cache[req].route_idx >= 0 &&
+                slack_cache[req].score < best_score) {
+                best_score = slack_cache[req].score;
+                best_req = req;
+            }
+        }
+
         if (best_req < 0) break;
 
-        repaired.routes[best_route].insert(
-            repaired.routes[best_route].begin() + best_p, best_req);
-        repaired.routes[best_route].insert(
-            repaired.routes[best_route].begin() + best_d, best_req + n);
-        repaired.unassigned.erase(best_req);
+        const SlackCache b = slack_cache[best_req];
+        int k_star = b.route_idx;
 
-        // Recompute aux, slack, and cost for modified route
-        aux_cache[best_route] = precompute_route_aux(repaired.routes[best_route], inst);
-        baseline_slack[best_route] = compute_route_slack(repaired.routes[best_route], inst);
-        baseline_cost[best_route] = compute_route_cost(repaired.routes[best_route], inst);
+        // Step 3: Safety re-validation before commit
+        if (!check_insertion_o1(aux_cache[k_star], best_req, b.p_pos, b.d_pos - 1, inst)) {
+            slack_cache[best_req].valid = false;
+            continue;
+        }
+
+        // Step 4: Commit the insertion
+        repaired.routes[k_star].insert(
+            repaired.routes[k_star].begin() + b.p_pos, best_req);
+        repaired.routes[k_star].insert(
+            repaired.routes[k_star].begin() + b.d_pos, best_req + n);
+        repaired.unassigned.erase(best_req);
+        slack_cache[best_req].valid = false;
+
+        // Step 5: Recompute aux, slack, and cost for the modified route
+        aux_cache[k_star] = precompute_route_aux(repaired.routes[k_star], inst);
+        baseline_slack[k_star] = compute_route_slack(repaired.routes[k_star], inst);
+        baseline_cost[k_star] = compute_route_cost(repaired.routes[k_star], inst);
+
+        // Step 6: Invalidate cache entries that pointed to the modified route
+        for (int req : repaired.unassigned) {
+            if (slack_cache[req].valid && slack_cache[req].route_idx == k_star) {
+                slack_cache[req].valid = false;
+            }
+        }
     }
 
     return repaired;

@@ -212,46 +212,86 @@ static DARPSolution regret_k_o1(const DARPSolution& sol, std::mt19937& rng, int 
     std::vector<RouteAuxData> aux_cache(repaired.routes.size());
     std::vector<bool> aux_computed(repaired.routes.size(), false);
 
+    // Best-insertion cache: indexed by request id [0..n]
+    struct RegretCache {
+        std::vector<InsertionOption> options;
+        double regret;
+        bool valid;
+    };
+
+    std::vector<RegretCache> regret_cache(n + 1);
+    for (int i = 0; i <= n; i++) {
+        regret_cache[i].valid = false;
+        regret_cache[i].regret = -std::numeric_limits<double>::infinity();
+    }
+
     while (!repaired.unassigned.empty()) {
-        double best_regret = -std::numeric_limits<double>::infinity();
-        int best_req = -1;
-        InsertionOption best_option{};
-        bool found_any = false;
-
+        // Step 1: Refresh cache for any invalidated entries
         for (int req : repaired.unassigned) {
-            auto options = find_best_insertions_o1(repaired, aux_cache, aux_computed, req, k);
-            if (options.empty()) continue;
+            if (!regret_cache[req].valid) {
+                auto options = find_best_insertions_o1(
+                    repaired, aux_cache, aux_computed, req, k);
 
-            double regret = 0.0;
-            for (int j = 1; j < k; j++) {
-                if (j < static_cast<int>(options.size())) {
-                    regret += options[j].cost - options[0].cost;
-                } else {
-                    regret += 1000.0;
+                double regret = 0.0;
+                for (int j = 1; j < k; j++) {
+                    if (j < static_cast<int>(options.size())) {
+                        regret += options[j].cost - options[0].cost;
+                    } else {
+                        regret += 1000.0;
+                    }
                 }
-            }
 
-            if (regret > best_regret || !found_any) {
-                best_regret = regret;
-                best_req = req;
-                best_option = options[0];
-                found_any = true;
+                regret_cache[req].options = std::move(options);
+                regret_cache[req].regret = regret;
+                regret_cache[req].valid = true;
             }
         }
 
-        if (!found_any) break;
+        // Step 2: Find highest-regret request
+        double best_regret = -std::numeric_limits<double>::infinity();
+        int best_req = -1;
+        for (int req : repaired.unassigned) {
+            if (regret_cache[req].valid &&
+                !regret_cache[req].options.empty() &&
+                regret_cache[req].regret > best_regret) {
+                best_regret = regret_cache[req].regret;
+                best_req = req;
+            }
+        }
 
-        repaired.routes[best_option.route_idx].insert(
-            repaired.routes[best_option.route_idx].begin() + best_option.p_pos,
-            best_req);
-        repaired.routes[best_option.route_idx].insert(
-            repaired.routes[best_option.route_idx].begin() + best_option.d_pos,
-            best_req + n);
+        if (best_req < 0) break;
+
+        const InsertionOption b = regret_cache[best_req].options[0];
+        int k_star = b.route_idx;
+
+        // Step 3: Safety re-validation before commit
+        if (!check_insertion_o1(aux_cache[k_star], best_req, b.p_pos, b.d_pos - 1, inst)) {
+            regret_cache[best_req].valid = false;
+            continue;
+        }
+
+        // Step 4: Commit the insertion
+        repaired.routes[k_star].insert(
+            repaired.routes[k_star].begin() + b.p_pos, best_req);
+        repaired.routes[k_star].insert(
+            repaired.routes[k_star].begin() + b.d_pos, best_req + n);
         repaired.unassigned.erase(best_req);
+        regret_cache[best_req].valid = false;
 
-        // Recompute aux only for modified route
-        aux_cache[best_option.route_idx] = precompute_route_aux(
-            repaired.routes[best_option.route_idx], inst);
+        // Step 5: Recompute aux for the modified route
+        aux_cache[k_star] = precompute_route_aux(repaired.routes[k_star], inst);
+
+        // Step 6: Invalidate cache entries where ANY option points to k_star
+        for (int req : repaired.unassigned) {
+            if (regret_cache[req].valid) {
+                for (const auto& opt : regret_cache[req].options) {
+                    if (opt.route_idx == k_star) {
+                        regret_cache[req].valid = false;
+                        break;
+                    }
+                }
+            }
+        }
     }
 
     return repaired;
