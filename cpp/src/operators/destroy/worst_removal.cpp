@@ -1,6 +1,8 @@
 #include "operators/destroy/worst_removal.h"
+#include "operators/repair/repair_utils.h"
 
 #include <algorithm>
+#include <chrono>
 #include <cmath>
 #include <vector>
 
@@ -79,6 +81,7 @@ static void remove_request(DARPSolution& sol, int req, int route_idx) {
 // Worst removal
 // ---------------------------------------------------------------------------
 DARPSolution worst_removal(const DARPSolution& sol, std::mt19937& rng) {
+    auto _t0 = std::chrono::high_resolution_clock::now();
     DARPSolution destroyed = sol.copy();
     int n = destroyed.instance->num_requests;
 
@@ -100,30 +103,36 @@ DARPSolution worst_removal(const DARPSolution& sol, std::mt19937& rng) {
     std::uniform_int_distribution<int> dist(lo, hi - 1);
     int q = std::min(dist(rng), static_cast<int>(assigned.size()));
 
-    for (int removed = 0; removed < q; removed++) {
-        // Rebuild index (routes change after each removal)
-        auto req_route = build_req_to_route(destroyed);
+    // Build req_route index and compute removal costs once
+    auto req_route = build_req_to_route(destroyed);
 
-        std::vector<std::pair<double, int>> costs;
-        for (int req : assigned) {
-            if (!destroyed.unassigned.count(req) && req_route[req] >= 0) {
-                double c = removal_cost(destroyed, req, req_route[req]);
-                costs.push_back({c, req});
-            }
+    std::vector<std::pair<double, int>> costs;
+    for (int req : assigned) {
+        if (req_route[req] >= 0) {
+            double c = removal_cost(destroyed, req, req_route[req]);
+            costs.push_back({c, req});
         }
-        if (costs.empty()) break;
+    }
 
-        std::sort(costs.begin(), costs.end(),
-                  [](const auto& a, const auto& b) { return a.first > b.first; });
+    // Sort descending by cost (highest cost = worst = removed first)
+    std::sort(costs.begin(), costs.end(),
+              [](const auto& a, const auto& b) { return a.first > b.first; });
 
+    for (int removed = 0; removed < q && !costs.empty(); removed++) {
         std::uniform_real_distribution<double> u(0.0, 1.0);
         int idx = static_cast<int>(
             std::floor(std::pow(u(rng), RANDOMIZATION_P) * costs.size()));
         idx = std::min(idx, static_cast<int>(costs.size()) - 1);
 
         int req = costs[idx].second;
-        remove_request(destroyed, req, req_route[req]);
+        if (req_route[req] >= 0) {
+            remove_request(destroyed, req, req_route[req]);
+        }
+        costs.erase(costs.begin() + idx);
     }
 
+    auto _t1 = std::chrono::high_resolution_clock::now();
+    DynamicStats::destroy_worst_ms += std::chrono::duration<double, std::milli>(_t1 - _t0).count();
+    DynamicStats::destroy_worst_count++;
     return destroyed;
 }

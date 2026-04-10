@@ -1,6 +1,8 @@
 #include "operators/destroy/random_removal.h"
+#include "operators/repair/repair_utils.h"
 
 #include <algorithm>
+#include <chrono>
 #include <vector>
 
 // ---------------------------------------------------------------------------
@@ -38,6 +40,7 @@ static void remove_request(DARPSolution& sol, int req, int route_idx) {
 // Random removal
 // ---------------------------------------------------------------------------
 DARPSolution random_removal(const DARPSolution& sol, std::mt19937& rng) {
+    auto _t0 = std::chrono::high_resolution_clock::now();
     DARPSolution destroyed = sol.copy();
     int n = destroyed.instance->num_requests;
 
@@ -76,5 +79,8 @@ DARPSolution random_removal(const DARPSolution& sol, std::mt19937& rng) {
         }
     }
 
+    auto _t1 = std::chrono::high_resolution_clock::now();
+    DynamicStats::destroy_random_ms += std::chrono::duration<double, std::milli>(_t1 - _t0).count();
+    DynamicStats::destroy_random_count++;
     return destroyed;
 }

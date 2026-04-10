@@ -380,9 +380,12 @@ static DARPSolution slack_insertion_classic(const DARPSolution& sol, std::mt1993
 // Public API
 // ---------------------------------------------------------------------------
 DARPSolution slack_insertion(const DARPSolution& sol, std::mt19937& rng) {
-    if (sol.feasibility_mode == "o1") {
-        return slack_insertion_o1(sol, rng);
-    } else {
-        return slack_insertion_classic(sol, rng);
-    }
+    auto _t0 = std::chrono::high_resolution_clock::now();
+    DARPSolution result = (sol.feasibility_mode == "o1")
+        ? slack_insertion_o1(sol, rng)
+        : slack_insertion_classic(sol, rng);
+    auto _t1 = std::chrono::high_resolution_clock::now();
+    DynamicStats::repair_slack_ms += std::chrono::duration<double, std::milli>(_t1 - _t0).count();
+    DynamicStats::repair_slack_count++;
+    return result;
 }

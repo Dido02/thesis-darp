@@ -1,9 +1,12 @@
 #include "operators/destroy/entire_route_removal.h"
+#include "operators/repair/repair_utils.h"
 
 #include <algorithm>
+#include <chrono>
 #include <vector>
 
 DARPSolution entire_route_removal(const DARPSolution& sol, std::mt19937& rng) {
+    auto _t0 = std::chrono::high_resolution_clock::now();
     DARPSolution destroyed = sol.copy();
     const auto& inst = *destroyed.instance;
     int n = inst.num_requests;
@@ -60,5 +63,8 @@ DARPSolution entire_route_removal(const DARPSolution& sol, std::mt19937& rng) {
         }
     }
 
+    auto _t1 = std::chrono::high_resolution_clock::now();
+    DynamicStats::destroy_entireroute_ms += std::chrono::duration<double, std::milli>(_t1 - _t0).count();
+    DynamicStats::destroy_entireroute_count++;
     return destroyed;
 }

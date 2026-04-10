@@ -1,6 +1,8 @@
 #include "operators/destroy/shaw_removal.h"
+#include "operators/repair/repair_utils.h"
 
 #include <algorithm>
+#include <chrono>
 #include <cmath>
 #include <vector>
 
@@ -49,30 +51,30 @@ struct RequestInfo {
     int load_at_pickup;
 };
 
-static RequestInfo get_request_info(const DARPSolution& sol, int req) {
+static RequestInfo get_request_info(const DARPSolution& sol, int req,
+                                    const std::vector<int>& req_route) {
     const auto& inst = *sol.instance;
     const auto& tt = inst.travel_time;
     const auto& nodes = inst.nodes;
-    int n = inst.num_requests;
     int pickup_id = req;
 
-    for (int k = 0; k < static_cast<int>(sol.routes.size()); k++) {
-        const auto& route = sol.routes[k];
-        // Forward pass to get times and loads
-        double depart = nodes[route[0]].earliest + nodes[route[0]].service_duration;
-        int load = 0;
+    int k = req_route[req];
+    if (k < 0) return {-1, -1, 0.0, 0};
 
-        for (int i = 1; i < static_cast<int>(route.size()); i++) {
-            double arrival = depart + tt[route[i - 1]][route[i]];
-            double begin = std::max(arrival, nodes[route[i]].earliest);
-            load += nodes[route[i]].demand;
+    const auto& route = sol.routes[k];
+    double depart = nodes[route[0]].earliest + nodes[route[0]].service_duration;
+    int load = 0;
 
-            if (route[i] == pickup_id) {
-                return {k, i, begin, load};
-            }
+    for (int i = 1; i < static_cast<int>(route.size()); i++) {
+        double arrival = depart + tt[route[i - 1]][route[i]];
+        double begin = std::max(arrival, nodes[route[i]].earliest);
+        load += nodes[route[i]].demand;
 
-            depart = begin + nodes[route[i]].service_duration;
+        if (route[i] == pickup_id) {
+            return {k, i, begin, load};
         }
+
+        depart = begin + nodes[route[i]].service_duration;
     }
     return {-1, -1, 0.0, 0};
 }
@@ -81,6 +83,7 @@ static RequestInfo get_request_info(const DARPSolution& sol, int req) {
 // Shaw removal
 // ---------------------------------------------------------------------------
 DARPSolution shaw_removal(const DARPSolution& sol, std::mt19937& rng) {
+    auto _t0 = std::chrono::high_resolution_clock::now();
     DARPSolution destroyed = sol.copy();
     const auto& inst = *destroyed.instance;
     const auto& nodes = inst.nodes;
@@ -105,24 +108,21 @@ DARPSolution shaw_removal(const DARPSolution& sol, std::mt19937& rng) {
     int q = std::min(dist(rng), static_cast<int>(assigned.size()));
 
     // Normalize factors for relatedness (use instance max values)
-    double max_dist = 0.0;
-    double max_time = 0.0;
+    double max_dist = inst.max_travel_time();
+    double max_time = inst.max_route_duration;
     int max_load = inst.vehicle_capacity;
-    for (int i = 0; i <= 2 * n + 1; i++) {
-        for (int j = 0; j <= 2 * n + 1; j++) {
-            if (i != j) max_dist = std::max(max_dist, inst.travel_time[i][j]);
-        }
-    }
-    max_time = inst.max_route_duration;
     if (max_dist < 1e-9) max_dist = 1.0;
     if (max_time < 1e-9) max_time = 1.0;
+
+    // Build request-to-route index once for efficient lookups
+    auto req_route = build_req_to_route(destroyed);
 
     // Pick a random seed request
     std::uniform_int_distribution<int> seed_dist(0, static_cast<int>(assigned.size()) - 1);
     int seed_req = assigned[seed_dist(rng)];
 
     // Get info for seed request
-    RequestInfo seed_info = get_request_info(destroyed, seed_req);
+    RequestInfo seed_info = get_request_info(destroyed, seed_req, req_route);
 
     // Compute relatedness to seed for all other assigned requests
     std::vector<std::pair<double, int>> relatedness;
@@ -130,7 +130,7 @@ DARPSolution shaw_removal(const DARPSolution& sol, std::mt19937& rng) {
         if (req == seed_req) continue;
         if (destroyed.unassigned.count(req)) continue;
 
-        RequestInfo info = get_request_info(destroyed, req);
+        RequestInfo info = get_request_info(destroyed, req, req_route);
         if (info.route_idx < 0) continue;
 
         int pickup_i = seed_req;
@@ -156,9 +156,6 @@ DARPSolution shaw_removal(const DARPSolution& sol, std::mt19937& rng) {
     // Sort by relatedness (ascending = most similar first)
     std::sort(relatedness.begin(), relatedness.end());
 
-    // Build request-to-route index
-    auto req_route = build_req_to_route(destroyed);
-
     // Remove seed request first
     if (req_route[seed_req] >= 0)
         remove_request(destroyed, seed_req, req_route[seed_req]);
@@ -182,5 +179,8 @@ DARPSolution shaw_removal(const DARPSolution& sol, std::mt19937& rng) {
         relatedness.erase(relatedness.begin() + idx);
     }
 
+    auto _t1 = std::chrono::high_resolution_clock::now();
+    DynamicStats::destroy_shaw_ms += std::chrono::duration<double, std::milli>(_t1 - _t0).count();
+    DynamicStats::destroy_shaw_count++;
     return destroyed;
 }

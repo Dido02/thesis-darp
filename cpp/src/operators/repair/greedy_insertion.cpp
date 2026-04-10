@@ -325,9 +325,12 @@ static DARPSolution greedy_insertion_classic(const DARPSolution& sol, std::mt199
 // Greedy insertion — dispatcher
 // ---------------------------------------------------------------------------
 DARPSolution greedy_insertion(const DARPSolution& sol, std::mt19937& rng) {
-    if (sol.feasibility_mode == "o1") {
-        return greedy_insertion_o1(sol, rng);
-    } else {
-        return greedy_insertion_classic(sol, rng);
-    }
+    auto _t0 = std::chrono::high_resolution_clock::now();
+    DARPSolution result = (sol.feasibility_mode == "o1")
+        ? greedy_insertion_o1(sol, rng)
+        : greedy_insertion_classic(sol, rng);
+    auto _t1 = std::chrono::high_resolution_clock::now();
+    DynamicStats::repair_greedy_ms += std::chrono::duration<double, std::milli>(_t1 - _t0).count();
+    DynamicStats::repair_greedy_count++;
+    return result;
 }

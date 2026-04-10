@@ -504,7 +504,36 @@ DynamicResult DynamicSolver::run() {
                               << "/" << static_cast<int>(current_solution_.routes.size())
                               << " feas_checks=" << log.avg_feas_checks << "/iter"
                               << " aux=" << static_cast<int>(log.aux_precompute_ms) << "ms"
-                              << " greedy=" << static_cast<int>(log.greedy_preinsert_ms) << "ms\n";
+                              << " greedy=" << static_cast<int>(log.greedy_preinsert_ms) << "ms";
+                    // Per-repair-operator timing
+                    std::cout << "\n| repair_ops:";
+                    if (DynamicStats::repair_greedy_count > 0)
+                        std::cout << " greedy=" << static_cast<int>(DynamicStats::repair_greedy_ms) << "ms(" << DynamicStats::repair_greedy_count << ")";
+                    if (DynamicStats::repair_regret2_count > 0)
+                        std::cout << " regret2=" << static_cast<int>(DynamicStats::repair_regret2_ms) << "ms(" << DynamicStats::repair_regret2_count << ")";
+                    if (DynamicStats::repair_regret3_count > 0)
+                        std::cout << " regret3=" << static_cast<int>(DynamicStats::repair_regret3_ms) << "ms(" << DynamicStats::repair_regret3_count << ")";
+                    if (DynamicStats::repair_regret4_count > 0)
+                        std::cout << " regret4=" << static_cast<int>(DynamicStats::repair_regret4_ms) << "ms(" << DynamicStats::repair_regret4_count << ")";
+                    if (DynamicStats::repair_regretM_count > 0)
+                        std::cout << " regretM=" << static_cast<int>(DynamicStats::repair_regretM_ms) << "ms(" << DynamicStats::repair_regretM_count << ")";
+                    if (DynamicStats::repair_slack_count > 0)
+                        std::cout << " slack=" << static_cast<int>(DynamicStats::repair_slack_ms) << "ms(" << DynamicStats::repair_slack_count << ")";
+                    // Per-destroy-operator timing
+                    std::cout << "\n| destroy_ops:";
+                    if (DynamicStats::destroy_random_count > 0)
+                        std::cout << " rand=" << static_cast<int>(DynamicStats::destroy_random_ms) << "ms(" << DynamicStats::destroy_random_count << ")";
+                    if (DynamicStats::destroy_worst_count > 0)
+                        std::cout << " worst=" << static_cast<int>(DynamicStats::destroy_worst_ms) << "ms(" << DynamicStats::destroy_worst_count << ")";
+                    if (DynamicStats::destroy_shaw_count > 0)
+                        std::cout << " shaw=" << static_cast<int>(DynamicStats::destroy_shaw_ms) << "ms(" << DynamicStats::destroy_shaw_count << ")";
+                    if (DynamicStats::destroy_rtcritical_count > 0)
+                        std::cout << " rtcrit=" << static_cast<int>(DynamicStats::destroy_rtcritical_ms) << "ms(" << DynamicStats::destroy_rtcritical_count << ")";
+                    if (DynamicStats::destroy_lowslack_count > 0)
+                        std::cout << " lowslack=" << static_cast<int>(DynamicStats::destroy_lowslack_ms) << "ms(" << DynamicStats::destroy_lowslack_count << ")";
+                    if (DynamicStats::destroy_entireroute_count > 0)
+                        std::cout << " entire=" << static_cast<int>(DynamicStats::destroy_entireroute_ms) << "ms(" << DynamicStats::destroy_entireroute_count << ")";
+                    std::cout << "\n";
                 }
                 std::cout << "\n";
             }

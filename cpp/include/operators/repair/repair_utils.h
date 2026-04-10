@@ -17,6 +17,20 @@ struct DynamicStats {
     static int repair_calls;
     static double aux_precompute_ms;
 
+    // Per-repair-operator timing (ms)
+    static double repair_greedy_ms;
+    static double repair_regret2_ms;
+    static double repair_regret3_ms;
+    static double repair_regret4_ms;
+    static double repair_regretM_ms;
+    static double repair_slack_ms;
+    static int repair_greedy_count;
+    static int repair_regret2_count;
+    static int repair_regret3_count;
+    static int repair_regret4_count;
+    static int repair_regretM_count;
+    static int repair_slack_count;
+
     // Per-destroy-operator timing (ms)
     static double destroy_random_ms;
     static double destroy_worst_ms;
@@ -37,6 +51,18 @@ struct DynamicStats {
         feas_checks = 0;
         repair_calls = 0;
         aux_precompute_ms = 0.0;
+        repair_greedy_ms = 0.0;
+        repair_regret2_ms = 0.0;
+        repair_regret3_ms = 0.0;
+        repair_regret4_ms = 0.0;
+        repair_regretM_ms = 0.0;
+        repair_slack_ms = 0.0;
+        repair_greedy_count = 0;
+        repair_regret2_count = 0;
+        repair_regret3_count = 0;
+        repair_regret4_count = 0;
+        repair_regretM_count = 0;
+        repair_slack_count = 0;
         destroy_random_ms = 0.0;
         destroy_worst_ms = 0.0;
         destroy_shaw_ms = 0.0;

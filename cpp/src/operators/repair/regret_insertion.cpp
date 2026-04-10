@@ -351,34 +351,42 @@ static DARPSolution regret_k_classic(const DARPSolution& sol, std::mt19937& rng,
 // Public API — dispatchers
 // ---------------------------------------------------------------------------
 DARPSolution regret2_insertion(const DARPSolution& sol, std::mt19937& rng) {
-    if (sol.feasibility_mode == "o1") {
-        return regret_k_o1(sol, rng, 2);
-    } else {
-        return regret_k_classic(sol, rng, 2);
-    }
+    auto _t0 = std::chrono::high_resolution_clock::now();
+    DARPSolution result = (sol.feasibility_mode == "o1")
+        ? regret_k_o1(sol, rng, 2) : regret_k_classic(sol, rng, 2);
+    auto _t1 = std::chrono::high_resolution_clock::now();
+    DynamicStats::repair_regret2_ms += std::chrono::duration<double, std::milli>(_t1 - _t0).count();
+    DynamicStats::repair_regret2_count++;
+    return result;
 }
 
 DARPSolution regret3_insertion(const DARPSolution& sol, std::mt19937& rng) {
-    if (sol.feasibility_mode == "o1") {
-        return regret_k_o1(sol, rng, 3);
-    } else {
-        return regret_k_classic(sol, rng, 3);
-    }
+    auto _t0 = std::chrono::high_resolution_clock::now();
+    DARPSolution result = (sol.feasibility_mode == "o1")
+        ? regret_k_o1(sol, rng, 3) : regret_k_classic(sol, rng, 3);
+    auto _t1 = std::chrono::high_resolution_clock::now();
+    DynamicStats::repair_regret3_ms += std::chrono::duration<double, std::milli>(_t1 - _t0).count();
+    DynamicStats::repair_regret3_count++;
+    return result;
 }
 
 DARPSolution regret4_insertion(const DARPSolution& sol, std::mt19937& rng) {
-    if (sol.feasibility_mode == "o1") {
-        return regret_k_o1(sol, rng, 4);
-    } else {
-        return regret_k_classic(sol, rng, 4);
-    }
+    auto _t0 = std::chrono::high_resolution_clock::now();
+    DARPSolution result = (sol.feasibility_mode == "o1")
+        ? regret_k_o1(sol, rng, 4) : regret_k_classic(sol, rng, 4);
+    auto _t1 = std::chrono::high_resolution_clock::now();
+    DynamicStats::repair_regret4_ms += std::chrono::duration<double, std::milli>(_t1 - _t0).count();
+    DynamicStats::repair_regret4_count++;
+    return result;
 }
 
 DARPSolution regretM_insertion(const DARPSolution& sol, std::mt19937& rng) {
+    auto _t0 = std::chrono::high_resolution_clock::now();
     int M = static_cast<int>(sol.routes.size());
-    if (sol.feasibility_mode == "o1") {
-        return regret_k_o1(sol, rng, M);
-    } else {
-        return regret_k_classic(sol, rng, M);
-    }
+    DARPSolution result = (sol.feasibility_mode == "o1")
+        ? regret_k_o1(sol, rng, M) : regret_k_classic(sol, rng, M);
+    auto _t1 = std::chrono::high_resolution_clock::now();
+    DynamicStats::repair_regretM_ms += std::chrono::duration<double, std::milli>(_t1 - _t0).count();
+    DynamicStats::repair_regretM_count++;
+    return result;
 }

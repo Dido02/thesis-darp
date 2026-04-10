@@ -25,8 +25,23 @@ struct DARPInstance {
     std::vector<std::vector<double>> travel_time;  // (2n+2) x (2n+2)
     std::vector<double> max_ride_time_per_request;  // indexed 1..n, empty = use global
     std::vector<int> vehicle_start_nodes;  // size K node IDs for per-vehicle starts, empty = shared depot
+    mutable double cached_max_travel_time_ = -1.0;
 
     int num_nodes() const { return static_cast<int>(nodes.size()); }
+
+    double max_travel_time() const {
+        if (cached_max_travel_time_ < 0) {
+            double m = 0.0;
+            int N = num_nodes();
+            for (int i = 0; i < N; i++) {
+                for (int j = 0; j < N; j++) {
+                    if (i != j && travel_time[i][j] > m) m = travel_time[i][j];
+                }
+            }
+            cached_max_travel_time_ = m;
+        }
+        return cached_max_travel_time_;
+    }
 
     // First valid insertion position in a route (after depot and optional vehicle start)
     int route_start_offset() const { return vehicle_start_nodes.empty() ? 1 : 2; }
