@@ -17,12 +17,38 @@ struct DynamicStats {
     static int repair_calls;
     static double aux_precompute_ms;
 
+    // Per-destroy-operator timing (ms)
+    static double destroy_random_ms;
+    static double destroy_worst_ms;
+    static double destroy_shaw_ms;
+    static double destroy_rtcritical_ms;
+    static double destroy_lowslack_ms;
+    static double destroy_entireroute_ms;
+    static int destroy_random_count;
+    static int destroy_worst_count;
+    static int destroy_shaw_count;
+    static int destroy_rtcritical_count;
+    static int destroy_lowslack_count;
+    static int destroy_entireroute_count;
+
     static void reset() {
         routes_checked = 0;
         request_evals = 0;
         feas_checks = 0;
         repair_calls = 0;
         aux_precompute_ms = 0.0;
+        destroy_random_ms = 0.0;
+        destroy_worst_ms = 0.0;
+        destroy_shaw_ms = 0.0;
+        destroy_rtcritical_ms = 0.0;
+        destroy_lowslack_ms = 0.0;
+        destroy_entireroute_ms = 0.0;
+        destroy_random_count = 0;
+        destroy_worst_count = 0;
+        destroy_shaw_count = 0;
+        destroy_rtcritical_count = 0;
+        destroy_lowslack_count = 0;
+        destroy_entireroute_count = 0;
     }
 };
 
