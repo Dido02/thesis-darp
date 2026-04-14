@@ -7,6 +7,8 @@
 #include <string>
 #include <vector>
 
+class ALNSLogger;  // forward declaration
+
 struct EpochConfig {
     enum TriggerMode { TIME_BASED, REQUEST_COUNT };
     TriggerMode trigger = TIME_BASED;
@@ -60,6 +62,7 @@ struct SolverParams {
     double unassigned_penalty = 1000.0;
     int top_n_routes = 0;  // limit repair to N nearest routes (0 = no limit)
     bool dynamic_stats = false;  // print per-epoch performance stats
+    ALNSLogger* logger = nullptr;  // non-owning, nullable
 };
 
 class DynamicSolver {

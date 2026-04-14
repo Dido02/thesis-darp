@@ -31,6 +31,8 @@ public:
 
     const std::vector<double>& get_destroy_weights() const { return destroy_weights_; }
     const std::vector<double>& get_repair_weights() const { return repair_weights_; }
+    const DestroyOp& get_destroy(int idx) const { return destroy_ops_[idx].second; }
+    const RepairOp& get_repair(int idx) const { return repair_ops_[idx].second; }
 
 private:
     std::vector<std::pair<std::string, DestroyOp>> destroy_ops_;

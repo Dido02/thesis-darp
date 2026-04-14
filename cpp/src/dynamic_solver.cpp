@@ -2,6 +2,7 @@
 #include "solver.h"
 #include "feasibility/o1_feasibility.h"
 #include "operators/repair/repair_utils.h"
+#include "logging/alns_logger.h"
 
 #include <algorithm>
 #include <chrono>
@@ -343,6 +344,15 @@ EpochLog DynamicSolver::run_epoch_alns(int epoch_id) {
     // Capture pre-ALNS objective
     double obj_before = epoch_sol.travel_cost();
 
+    // Emit epoch_start record if logging
+    if (solver_params_.logger) {
+        solver_params_.logger->log_epoch_start(
+            epoch_id, sim_clock_,
+            epoch_sol.routes, epoch_sol.unassigned,
+            epoch_sol.committed, epoch_sol.min_insert_pos,
+            pending_, rejected_, obj_before);
+    }
+
     // Run ALNS with time budget
     double time_budget = epoch_config_.epoch_budget_ms / 1000.0;
     SolverResult result = solve_warm(
@@ -357,7 +367,8 @@ EpochLog DynamicSolver::run_epoch_alns(int epoch_id) {
         solver_params_.repair_config,
         solver_params_.selection_config,
         time_budget,
-        solver_params_.unassigned_penalty);
+        solver_params_.unassigned_penalty,
+        solver_params_.logger);
 
     // Update current solution from ALNS result
     current_solution_ = std::move(result.best);

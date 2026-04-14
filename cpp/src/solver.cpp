@@ -2,10 +2,12 @@
 #include "initial_solution.h"
 #include "operators.h"
 #include "feasibility.h"
+#include "logging/alns_logger.h"
 
 #include <algorithm>
 #include <chrono>
 #include <cmath>
+#include <cstdint>
 #include <iostream>
 #include <random>
 #include <sstream>
@@ -232,7 +234,8 @@ SolverResult solve(
     const std::string& selection_config,
     double time_limit,
     double unassigned_penalty,
-    const std::string& init_sort) {
+    const std::string& init_sort,
+    ALNSLogger* logger) {
 
     using Clock = std::chrono::high_resolution_clock;
 
@@ -312,13 +315,27 @@ SolverResult solve(
     double total_other_time = 0.0;
     auto prev_iter_end = solve_t0;
 
+    // Logging: header + initial weights + snapshot buffers
+    if (logger) {
+        logger->write_header(registry, max_iterations, sa_start_temp, sa_end_temp, sa_step,
+                             feasibility_mode, unassigned_penalty, selection_config,
+                             instance.num_requests, instance.num_vehicles);
+        logger->log_weights(0, registry);
+    }
+    std::vector<std::vector<int>> pre_routes;
+    std::set<int> pre_unassigned;
+    std::set<int> pre_committed;
+    std::vector<int> pre_min_insert_pos;
+    double total_logging_time = 0.0;
+
     int final_iter = 0;
     for (int iter = 0; iter < max_iterations; iter++) {
         final_iter = iter + 1;
 
         if (time_limit > 0.0) {
             auto now = Clock::now();
-            double elapsed = std::chrono::duration<double>(now - solve_t0).count();
+            double elapsed = std::chrono::duration<double>(now - solve_t0).count()
+                           - total_logging_time;
             if (elapsed >= time_limit) {
                 if (verbose) {
                     std::cout << "  Time limit reached at iter " << iter
@@ -342,6 +359,9 @@ SolverResult solve(
                               << " iter/s, estimated " << estimated_total
                               << " total, step=" << sa_step << "\n";
                 }
+                if (logger) {
+                    logger->log_sa_calibrated(iter, sa_step, estimated_total);
+                }
             }
         }
         // Select operators
@@ -351,9 +371,27 @@ SolverResult solve(
         destroy_count[d_idx]++;
         repair_count[r_idx]++;
 
+        // Hook B: pre-destroy snapshot for logging
+        double temp_before = temperature;
+        double best_obj_before = best_obj;
+        if (logger) {
+            pre_routes = current.routes;
+            pre_unassigned = current.unassigned;
+            pre_committed = current.committed;
+            pre_min_insert_pos = current.min_insert_pos;
+        }
+
         // Destroy + Repair
         auto t_destroy = Clock::now();
         DARPSolution destroyed = destroy(current, rng);
+
+        // Hook C: compute q
+        int q = 0;
+        if (logger) {
+            q = static_cast<int>(destroyed.unassigned.size())
+              - static_cast<int>(current.unassigned.size());
+        }
+
         auto t_repair = Clock::now();
         DARPSolution candidate = repair(destroyed, rng);
         auto t_done = Clock::now();
@@ -365,6 +403,7 @@ SolverResult solve(
         double candidate_obj = candidate.objective();
 
         // SA acceptance
+        double current_obj_before_accept = current_obj;
         double delta = candidate_obj - current_obj;
         bool accept = false;
         if (delta < -EPS) {
@@ -400,6 +439,36 @@ SolverResult solve(
 
         registry.update_weights(d_idx, r_idx, score);
         temperature *= sa_step;
+
+        // Hook D: log iteration + weights + trials (timed separately)
+        if (logger) {
+            auto t_log0 = Clock::now();
+            logger->log_iteration(iter, d_idx, r_idx,
+                registry.destroy_name(d_idx), registry.repair_name(r_idx),
+                current_obj_before_accept, candidate_obj, best_obj_before,
+                delta, temp_before, accept, q,
+                pre_routes, pre_unassigned, pre_committed, pre_min_insert_pos);
+            if ((iter + 1) % 100 == 0) {
+                logger->log_weights(iter + 1, registry);
+            }
+            // Hook E: M-trials
+            if (logger->should_run_trials(iter)) {
+                DARPSolution trial_state(instance);
+                trial_state.routes = pre_routes;
+                trial_state.unassigned = pre_unassigned;
+                trial_state.committed = pre_committed;
+                trial_state.min_insert_pos = pre_min_insert_pos;
+                trial_state.feasibility_mode = feasibility_mode;
+                trial_state.unassigned_penalty = unassigned_penalty;
+
+                uint64_t trial_seed = static_cast<uint64_t>(seed) * 1000003ULL
+                                    + static_cast<uint64_t>(iter);
+                logger->run_and_log_trials(iter, trial_state, current_obj_before_accept,
+                                           temp_before, registry, trial_seed);
+            }
+            auto t_log1 = Clock::now();
+            total_logging_time += std::chrono::duration<double>(t_log1 - t_log0).count();
+        }
 
         if (verbose && (iter + 1) % 100 == 0) {
             std::cout << "  iter " << (iter + 1)
@@ -479,7 +548,8 @@ SolverResult solve_warm(
     const std::string& repair_config,
     const std::string& selection_config,
     double time_limit,
-    double unassigned_penalty) {
+    double unassigned_penalty,
+    ALNSLogger* logger) {
 
     using Clock = std::chrono::high_resolution_clock;
 
@@ -518,12 +588,26 @@ SolverResult solve_warm(
     double w_total_destroy_time = 0.0;
     double w_total_repair_time = 0.0;
 
+    // Logging: header + initial weights + snapshot buffers
+    if (logger) {
+        logger->write_header(registry, max_iterations, sa_start_temp, sa_end_temp, sa_step,
+                             feasibility_mode, unassigned_penalty, selection_config,
+                             instance.num_requests, instance.num_vehicles);
+        logger->log_weights(0, registry);
+    }
+    std::vector<std::vector<int>> pre_routes;
+    std::set<int> pre_unassigned;
+    std::set<int> pre_committed;
+    std::vector<int> pre_min_insert_pos;
+    double total_logging_time = 0.0;  // excludes logging/trial time from budget
+
     for (int iter = 0; iter < max_iterations; iter++) {
         final_iter = iter + 1;
 
         if (time_limit > 0.0) {
             auto now = Clock::now();
-            double elapsed = std::chrono::duration<double>(now - solve_t0).count();
+            double elapsed = std::chrono::duration<double>(now - solve_t0).count()
+                           - total_logging_time;
             if (elapsed >= time_limit) break;
 
             if (!sa_calibrated && iter == 10 && elapsed > 0.0) {
@@ -534,6 +618,9 @@ SolverResult solve_warm(
                 sa_step = std::pow(sa_end_temp / sa_start_temp, 1.0 / estimated_total);
                 temperature = sa_start_temp;
                 sa_calibrated = true;
+                if (logger) {
+                    logger->log_sa_calibrated(iter, sa_step, estimated_total);
+                }
             }
         }
 
@@ -542,8 +629,26 @@ SolverResult solve_warm(
         destroy_count[d_idx]++;
         repair_count[r_idx]++;
 
+        // Hook B: pre-destroy snapshot for logging
+        double temp_before = temperature;
+        double best_obj_before = best_obj;
+        if (logger) {
+            pre_routes = current.routes;
+            pre_unassigned = current.unassigned;
+            pre_committed = current.committed;
+            pre_min_insert_pos = current.min_insert_pos;
+        }
+
         auto t_d0 = Clock::now();
         DARPSolution destroyed = destroy(current, rng);
+
+        // Hook C: compute q
+        int q = 0;
+        if (logger) {
+            q = static_cast<int>(destroyed.unassigned.size())
+              - static_cast<int>(current.unassigned.size());
+        }
+
         auto t_d1 = Clock::now();
         DARPSolution candidate = repair(destroyed, rng);
         auto t_d2 = Clock::now();
@@ -551,6 +656,7 @@ SolverResult solve_warm(
         w_total_repair_time += std::chrono::duration<double>(t_d2 - t_d1).count();
         double candidate_obj = candidate.objective();
 
+        double current_obj_before_accept = current_obj;
         double delta = candidate_obj - current_obj;
         bool accept = false;
         if (delta < -1e-6) {
@@ -576,6 +682,36 @@ SolverResult solve_warm(
 
         registry.update_weights(d_idx, r_idx, score);
         temperature *= sa_step;
+
+        // Hook D: log iteration + weights + trials (timed separately)
+        if (logger) {
+            auto t_log0 = Clock::now();
+            logger->log_iteration(iter, d_idx, r_idx,
+                registry.destroy_name(d_idx), registry.repair_name(r_idx),
+                current_obj_before_accept, candidate_obj, best_obj_before,
+                delta, temp_before, accept, q,
+                pre_routes, pre_unassigned, pre_committed, pre_min_insert_pos);
+            if ((iter + 1) % 100 == 0) {
+                logger->log_weights(iter + 1, registry);
+            }
+            // Hook E: M-trials
+            if (logger->should_run_trials(iter)) {
+                DARPSolution trial_state(instance);
+                trial_state.routes = pre_routes;
+                trial_state.unassigned = pre_unassigned;
+                trial_state.committed = pre_committed;
+                trial_state.min_insert_pos = pre_min_insert_pos;
+                trial_state.feasibility_mode = feasibility_mode;
+                trial_state.unassigned_penalty = unassigned_penalty;
+
+                uint64_t trial_seed = static_cast<uint64_t>(seed) * 1000003ULL
+                                    + static_cast<uint64_t>(iter);
+                logger->run_and_log_trials(iter, trial_state, current_obj_before_accept,
+                                           temp_before, registry, trial_seed);
+            }
+            auto t_log1 = Clock::now();
+            total_logging_time += std::chrono::duration<double>(t_log1 - t_log0).count();
+        }
     }
 
     auto solve_t1 = Clock::now();

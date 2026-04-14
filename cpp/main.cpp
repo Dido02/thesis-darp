@@ -4,9 +4,12 @@
 #include "parsers/li_lim.h"
 #include "solver.h"
 #include "dynamic_solver.h"
+#include "logging/alns_logger.h"
 
+#include <filesystem>
 #include <fstream>
 #include <iostream>
+#include <memory>
 #include <string>
 
 static void print_usage(const char* prog) {
@@ -89,6 +92,13 @@ int main(int argc, char* argv[]) {
     int top_n_routes = 0;     // 0 = no limit
     bool dynamic_stats = false;
 
+    // Logging options
+    bool log_state = false;
+    bool log_trials = false;
+    int m_trials = 5;
+    int m_trials_every = 50;
+    std::string log_dir = "logs";
+
     for (int i = 1; i < argc; i++) {
         std::string arg = argv[i];
         if (arg == "--instance" && i + 1 < argc) {
@@ -134,6 +144,16 @@ int main(int argc, char* argv[]) {
             top_n_routes = std::stoi(argv[++i]);
         } else if (arg == "--dynamic-stats") {
             dynamic_stats = true;
+        } else if (arg == "--log-state") {
+            log_state = true;
+        } else if (arg == "--log-trials") {
+            log_trials = true;
+        } else if (arg == "--m-trials" && i + 1 < argc) {
+            m_trials = std::stoi(argv[++i]);
+        } else if (arg == "--m-trials-every" && i + 1 < argc) {
+            m_trials_every = std::stoi(argv[++i]);
+        } else if (arg == "--log-dir" && i + 1 < argc) {
+            log_dir = argv[++i];
         } else if (arg == "--help" || arg == "-h") {
             print_usage(argv[0]);
             return 0;
@@ -157,6 +177,51 @@ int main(int argc, char* argv[]) {
               << ", Q=" << inst.vehicle_capacity
               << ", L=" << inst.max_ride_time
               << ", T=" << inst.max_route_duration << "\n";
+
+    // Warm lazy cache to prevent contamination from logging code paths
+    inst.max_travel_time();
+
+    // --log-trials implies --log-state
+    if (log_trials) log_state = true;
+
+    // Build CLI args string for logging
+    std::string cli_args;
+    for (int i = 0; i < argc; i++) {
+        if (i > 0) cli_args += ' ';
+        cli_args += argv[i];
+    }
+
+    // Construct logger (or nullptr if disabled)
+    std::unique_ptr<ALNSLogger> logger_ptr;
+    if (log_state || log_trials) {
+        ALNSLogConfig lc;
+        lc.log_state = log_state;
+        lc.log_trials = log_trials;
+        lc.m_trials = m_trials;
+        lc.m_trials_every = m_trials_every;
+        lc.output_dir = log_dir;
+        lc.instance_path = instance_path;
+        lc.cli_args = cli_args;
+        lc.seed = seed;
+        lc.dynamic = dynamic_mode;
+
+        // Build filename
+        std::string stem = std::filesystem::path(instance_path).stem().string();
+        std::string mode_suffix;
+        if (log_trials) {
+            mode_suffix = "_t" + std::to_string(m_trials) + "e" + std::to_string(m_trials_every);
+        } else {
+            mode_suffix = "_state";
+        }
+        std::string filename;
+        if (dynamic_mode) {
+            filename = stem + "_s" + std::to_string(seed) + mode_suffix + "_dynamic.jsonl";
+        } else {
+            filename = stem + "_s" + std::to_string(seed) + "_i" + std::to_string(iterations) + mode_suffix + ".jsonl";
+        }
+        logger_ptr = std::make_unique<ALNSLogger>(lc, filename);
+    }
+    ALNSLogger* logger = logger_ptr.get();
 
     if (dynamic_mode) {
         // ---- Dynamic DARP mode ----
@@ -183,6 +248,7 @@ int main(int argc, char* argv[]) {
         sp.unassigned_penalty = penalty;
         sp.top_n_routes = top_n_routes;
         sp.dynamic_stats = dynamic_stats;
+        sp.logger = logger;
 
         DynamicSolver dynamic_solver(inst, ec, sp, true);
         DynamicResult result = dynamic_solver.run();
@@ -197,7 +263,8 @@ int main(int argc, char* argv[]) {
         std::cout << "Feasibility mode: " << feasibility_mode << "\n";
         SolverResult result = solve(inst, iterations, sa_start, sa_end, seed, true,
                                     feasibility_mode, destroy_config, repair_config,
-                                    selection_config, time_limit, penalty, init_sort);
+                                    selection_config, time_limit, penalty, init_sort,
+                                    logger);
 
         std::cout << "\nFinal objective: " << result.best.objective() << "\n";
         std::cout << "Travel cost:     " << result.best.travel_cost() << "\n";
