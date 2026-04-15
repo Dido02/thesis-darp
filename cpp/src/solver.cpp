@@ -440,19 +440,24 @@ SolverResult solve(
         registry.update_weights(d_idx, r_idx, score);
         temperature *= sa_step;
 
-        // Hook D: log iteration + weights + trials (timed separately)
+        // Hook D: log state (every iter or only at trial iters) + trials
         if (logger) {
             auto t_log0 = Clock::now();
-            logger->log_iteration(iter, d_idx, r_idx,
-                registry.destroy_name(d_idx), registry.repair_name(r_idx),
-                current_obj_before_accept, candidate_obj, best_obj_before,
-                delta, temp_before, accept, q,
-                pre_routes, pre_unassigned, pre_committed, pre_min_insert_pos);
-            if ((iter + 1) % 100 == 0) {
+            bool is_trial_iter = logger->should_run_trials(iter);
+
+            // Log state: every iter if --log-state, or only at trial iters if --log-trials
+            if (logger->is_logging_state() || is_trial_iter) {
+                logger->log_iteration(iter, d_idx, r_idx,
+                    registry.destroy_name(d_idx), registry.repair_name(r_idx),
+                    current_obj_before_accept, candidate_obj, best_obj_before,
+                    delta, temp_before, accept, q,
+                    pre_routes, pre_unassigned, pre_committed, pre_min_insert_pos);
+            }
+            if (logger->is_logging_state() && (iter + 1) % 100 == 0) {
                 logger->log_weights(iter + 1, registry);
             }
             // Hook E: M-trials
-            if (logger->should_run_trials(iter)) {
+            if (is_trial_iter) {
                 DARPSolution trial_state(instance);
                 trial_state.routes = pre_routes;
                 trial_state.unassigned = pre_unassigned;
@@ -683,19 +688,24 @@ SolverResult solve_warm(
         registry.update_weights(d_idx, r_idx, score);
         temperature *= sa_step;
 
-        // Hook D: log iteration + weights + trials (timed separately)
+        // Hook D: log state (every iter or only at trial iters) + trials
         if (logger) {
             auto t_log0 = Clock::now();
-            logger->log_iteration(iter, d_idx, r_idx,
-                registry.destroy_name(d_idx), registry.repair_name(r_idx),
-                current_obj_before_accept, candidate_obj, best_obj_before,
-                delta, temp_before, accept, q,
-                pre_routes, pre_unassigned, pre_committed, pre_min_insert_pos);
-            if ((iter + 1) % 100 == 0) {
+            bool is_trial_iter = logger->should_run_trials(iter);
+
+            // Log state: every iter if --log-state, or only at trial iters if --log-trials
+            if (logger->is_logging_state() || is_trial_iter) {
+                logger->log_iteration(iter, d_idx, r_idx,
+                    registry.destroy_name(d_idx), registry.repair_name(r_idx),
+                    current_obj_before_accept, candidate_obj, best_obj_before,
+                    delta, temp_before, accept, q,
+                    pre_routes, pre_unassigned, pre_committed, pre_min_insert_pos);
+            }
+            if (logger->is_logging_state() && (iter + 1) % 100 == 0) {
                 logger->log_weights(iter + 1, registry);
             }
             // Hook E: M-trials
-            if (logger->should_run_trials(iter)) {
+            if (is_trial_iter) {
                 DARPSolution trial_state(instance);
                 trial_state.routes = pre_routes;
                 trial_state.unassigned = pre_unassigned;

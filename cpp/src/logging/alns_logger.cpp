@@ -183,7 +183,7 @@ void ALNSLogger::log_iteration(int iter, int d_idx, int r_idx,
                                 const std::set<int>& unassigned,
                                 const std::set<int>& committed,
                                 const std::vector<int>& min_insert_pos) {
-    if (!config_.log_state) return;
+    // Guard removed - caller decides when to call (every iter or only at trial iters)
 
     std::string json = "{\"type\":\"state\"";
     json += ",\"iter\":" + std::to_string(iter);

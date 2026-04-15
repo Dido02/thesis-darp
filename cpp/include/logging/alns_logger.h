@@ -63,6 +63,7 @@ public:
                             uint64_t trial_base_seed);
 
     bool is_enabled() const { return config_.log_state || config_.log_trials; }
+    bool is_logging_state() const { return config_.log_state; }
     bool should_run_trials(int iter) const;
 
 private:

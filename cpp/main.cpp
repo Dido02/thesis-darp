@@ -181,8 +181,7 @@ int main(int argc, char* argv[]) {
     // Warm lazy cache to prevent contamination from logging code paths
     inst.max_travel_time();
 
-    // --log-trials implies --log-state
-    if (log_trials) log_state = true;
+    // --log-trials no longer implies --log-state (can log trials independently)
 
     // Build CLI args string for logging
     std::string cli_args;
@@ -208,7 +207,9 @@ int main(int argc, char* argv[]) {
         // Build filename
         std::string stem = std::filesystem::path(instance_path).stem().string();
         std::string mode_suffix;
-        if (log_trials) {
+        if (log_trials && log_state) {
+            mode_suffix = "_t" + std::to_string(m_trials) + "e" + std::to_string(m_trials_every) + "_full";
+        } else if (log_trials) {
             mode_suffix = "_t" + std::to_string(m_trials) + "e" + std::to_string(m_trials_every);
         } else {
             mode_suffix = "_state";
