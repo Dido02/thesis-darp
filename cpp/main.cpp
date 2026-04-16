@@ -21,7 +21,8 @@ static void print_usage(const char* prog) {
               << "  --feasibility MODE   Feasibility check: slack, full, o1 (default: o1)\n"
               << "  --destroy OPS        Comma-separated destroy operators\n"
               << "  --repair OPS         Comma-separated repair operators\n"
-              << "  --selection METHOD   Operator selection: random, roulette (default: roulette)\n"
+              << "  --selection METHOD   Operator selection: random, roulette, ml (default: roulette)\n"
+              << "  --ml-model-dir DIR   Directory with feature_manifest.json + .onnx files (required for --selection ml)\n"
               << "  --sa-start TEMP      SA start temperature (default: 100)\n"
               << "  --sa-end TEMP        SA end temperature (default: 0.01)\n"
               << "  --time-limit SECS    Stop after this many seconds (default: 0 = use iterations)\n"
@@ -83,6 +84,7 @@ int main(int argc, char* argv[]) {
     double penalty = 1000.0;
     std::string init_sort = "slack";
     std::string output_routes_path;
+    std::string ml_model_dir;
 
     // Dynamic mode options
     bool dynamic_mode = false;
@@ -120,6 +122,8 @@ int main(int argc, char* argv[]) {
             repair_config = argv[++i];
         } else if (arg == "--selection" && i + 1 < argc) {
             selection_config = argv[++i];
+        } else if (arg == "--ml-model-dir" && i + 1 < argc) {
+            ml_model_dir = argv[++i];
         } else if (arg == "--sa-start" && i + 1 < argc) {
             sa_start = std::stod(argv[++i]);
         } else if (arg == "--sa-end" && i + 1 < argc) {
@@ -163,6 +167,22 @@ int main(int argc, char* argv[]) {
     if (instance_path.empty()) {
         print_usage(argv[0]);
         return 1;
+    }
+
+    // Early validation for --selection ml
+    if (selection_config == "ml") {
+#ifndef DARP_ENABLE_ML
+        std::cerr << "Error: --selection ml is not available: this binary was built "
+                  << "without ML support. Rebuild with -DENABLE_ML_SELECTION=ON.\n";
+        return 1;
+#else
+        if (ml_model_dir.empty()) {
+            std::cerr << "Error: --selection ml requires --ml-model-dir <path> "
+                      << "pointing to a directory with feature_manifest.json "
+                      << "and {d}_{r}.onnx files.\n";
+            return 1;
+        }
+#endif
     }
 
     std::cout << "Loading instance: " << instance_path << "\n";
@@ -224,6 +244,7 @@ int main(int argc, char* argv[]) {
     }
     ALNSLogger* logger = logger_ptr.get();
 
+    try {
     if (dynamic_mode) {
         // ---- Dynamic DARP mode ----
         EpochConfig ec;
@@ -250,6 +271,7 @@ int main(int argc, char* argv[]) {
         sp.top_n_routes = top_n_routes;
         sp.dynamic_stats = dynamic_stats;
         sp.logger = logger;
+        sp.ml_model_dir = ml_model_dir;
 
         DynamicSolver dynamic_solver(inst, ec, sp, true);
         DynamicResult result = dynamic_solver.run();
@@ -265,7 +287,7 @@ int main(int argc, char* argv[]) {
         SolverResult result = solve(inst, iterations, sa_start, sa_end, seed, true,
                                     feasibility_mode, destroy_config, repair_config,
                                     selection_config, time_limit, penalty, init_sort,
-                                    logger);
+                                    logger, ml_model_dir);
 
         std::cout << "\nFinal objective: " << result.best.objective() << "\n";
         std::cout << "Travel cost:     " << result.best.travel_cost() << "\n";
@@ -296,6 +318,10 @@ int main(int argc, char* argv[]) {
         if (!output_routes_path.empty()) {
             write_route_schedules(result.best, inst, output_routes_path);
         }
+    }
+    } catch (const std::exception& e) {
+        std::cerr << "Error: " << e.what() << "\n";
+        return 1;
     }
 
     return 0;

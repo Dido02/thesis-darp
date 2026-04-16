@@ -368,7 +368,8 @@ EpochLog DynamicSolver::run_epoch_alns(int epoch_id) {
         solver_params_.selection_config,
         time_budget,
         solver_params_.unassigned_penalty,
-        solver_params_.logger);
+        solver_params_.logger,
+        solver_params_.ml_model_dir);
 
     // Update current solution from ALNS result
     current_solution_ = std::move(result.best);

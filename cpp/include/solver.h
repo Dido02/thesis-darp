@@ -31,7 +31,8 @@ SolverResult solve(
     double time_limit = 0.0,
     double unassigned_penalty = 1000.0,
     const std::string& init_sort = "slack",
-    ALNSLogger* logger = nullptr);
+    ALNSLogger* logger = nullptr,
+    const std::string& ml_model_dir = "");
 
 // Warm-start ALNS: skip initial solution construction, use provided solution
 SolverResult solve_warm(
@@ -48,4 +49,5 @@ SolverResult solve_warm(
     const std::string& selection_config = "random",
     double time_limit = 0.0,
     double unassigned_penalty = 1000.0,
-    ALNSLogger* logger = nullptr);
+    ALNSLogger* logger = nullptr,
+    const std::string& ml_model_dir = "");

@@ -63,6 +63,7 @@ struct SolverParams {
     int top_n_routes = 0;  // limit repair to N nearest routes (0 = no limit)
     bool dynamic_stats = false;  // print per-epoch performance stats
     ALNSLogger* logger = nullptr;  // non-owning, nullable
+    std::string ml_model_dir;  // empty = no ML; required when selection_config == "ml"
 };
 
 class DynamicSolver {

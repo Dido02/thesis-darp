@@ -3,14 +3,18 @@
 #include "operators.h"
 #include "feasibility.h"
 #include "logging/alns_logger.h"
+#include "ml/alns_state.h"
 
 #include <algorithm>
 #include <chrono>
 #include <cmath>
 #include <cstdint>
 #include <iostream>
+#include <map>
+#include <memory>
 #include <random>
 #include <sstream>
+#include <stdexcept>
 
 static constexpr double EPS = 1e-6;
 
@@ -211,11 +215,66 @@ static OperatorRegistry build_registry(
         registry.set_selection_method(SelectionMethod::RANDOM);
     } else if (selection_config == "roulette") {
         registry.set_selection_method(SelectionMethod::ROULETTE_WHEEL);
+    } else if (selection_config == "ml") {
+        registry.set_selection_method(SelectionMethod::ML_GUIDED);
     } else {
         registry.set_selection_method(SelectionMethod::RANDOM);
     }
 
     return registry;
+}
+
+// ---------------------------------------------------------------------------
+// Attach MLSelector after build_registry when --selection ml is requested.
+// Scoped here because MLSelector construction needs the registry's current
+// operator names and indices. No-op for other selection methods.
+// ---------------------------------------------------------------------------
+#ifdef DARP_ENABLE_ML
+#include "ml/ml_selector.h"
+#endif
+
+static void attach_ml_selector_if_needed(
+    OperatorRegistry& registry,
+    const std::string& selection_config,
+    const std::string& ml_model_dir,
+    bool verbose) {
+
+    if (selection_config != "ml") return;
+
+#ifndef DARP_ENABLE_ML
+    (void)registry; (void)ml_model_dir; (void)verbose;
+    throw std::runtime_error(
+        "--selection ml: this binary was built without ML support. "
+        "Rebuild with -DENABLE_ML_SELECTION=ON.");
+#else
+    if (ml_model_dir.empty()) {
+        throw std::runtime_error(
+            "--selection ml requires --ml-model-dir <path> pointing to a directory "
+            "with feature_manifest.json and {d}_{r}.onnx files.");
+    }
+
+    // Active operators + name→index maps (registry is source of truth).
+    std::vector<std::string> active_destroy, active_repair;
+    std::map<std::string, int> d_to_idx, r_to_idx;
+    for (int i = 0; i < registry.num_destroy(); ++i) {
+        active_destroy.push_back(registry.destroy_name(i));
+        d_to_idx[registry.destroy_name(i)] = i;
+    }
+    for (int i = 0; i < registry.num_repair(); ++i) {
+        active_repair.push_back(registry.repair_name(i));
+        r_to_idx[registry.repair_name(i)] = i;
+    }
+
+    auto ml = std::make_unique<MLSelector>(
+        ml_model_dir, active_destroy, active_repair, d_to_idx, r_to_idx);
+
+    if (verbose) {
+        std::cout << "ML selector loaded: model_version=" << ml->model_version()
+                  << ", " << ml->n_active_pairs() << " active pairs, "
+                  << ml->n_features() << " features\n";
+    }
+    registry.set_ml_selector(std::move(ml));
+#endif
 }
 
 // ---------------------------------------------------------------------------
@@ -235,7 +294,8 @@ SolverResult solve(
     double time_limit,
     double unassigned_penalty,
     const std::string& init_sort,
-    ALNSLogger* logger) {
+    ALNSLogger* logger,
+    const std::string& ml_model_dir) {
 
     using Clock = std::chrono::high_resolution_clock;
 
@@ -243,6 +303,7 @@ SolverResult solve(
 
     // Build operator registry
     OperatorRegistry registry = build_registry(destroy_config, repair_config, selection_config);
+    attach_ml_selector_if_needed(registry, selection_config, ml_model_dir, verbose);
 
     if (verbose) {
         std::cout << "Operators: destroy=[";
@@ -364,9 +425,11 @@ SolverResult solve(
                 }
             }
         }
-        // Select operators
-        auto [d_idx, destroy] = registry.select_destroy(rng);
-        auto [r_idx, repair] = registry.select_repair(rng);
+        // Select operators (unified dispatch: RANDOM / ROULETTE / ML_GUIDED)
+        ALNSState alns_state{temperature, sa_start_temp};
+        auto [d_idx, r_idx] = registry.select_pair(rng, &current, &instance, &alns_state);
+        const auto& destroy = registry.get_destroy(d_idx);
+        const auto& repair  = registry.get_repair(r_idx);
 
         destroy_count[d_idx]++;
         repair_count[r_idx]++;
@@ -554,13 +617,15 @@ SolverResult solve_warm(
     const std::string& selection_config,
     double time_limit,
     double unassigned_penalty,
-    ALNSLogger* logger) {
+    ALNSLogger* logger,
+    const std::string& ml_model_dir) {
 
     using Clock = std::chrono::high_resolution_clock;
 
     std::mt19937 rng(seed);
 
     OperatorRegistry registry = build_registry(destroy_config, repair_config, selection_config);
+    attach_ml_selector_if_needed(registry, selection_config, ml_model_dir, verbose);
 
     DARPSolution init_sol = initial_solution.copy();
     init_sol.feasibility_mode = feasibility_mode;
@@ -629,8 +694,11 @@ SolverResult solve_warm(
             }
         }
 
-        auto [d_idx, destroy] = registry.select_destroy(rng);
-        auto [r_idx, repair] = registry.select_repair(rng);
+        // Select operators (unified dispatch: RANDOM / ROULETTE / ML_GUIDED)
+        ALNSState alns_state{temperature, sa_start_temp};
+        auto [d_idx, r_idx] = registry.select_pair(rng, &current, &instance, &alns_state);
+        const auto& destroy = registry.get_destroy(d_idx);
+        const auto& repair  = registry.get_repair(r_idx);
         destroy_count[d_idx]++;
         repair_count[r_idx]++;
 

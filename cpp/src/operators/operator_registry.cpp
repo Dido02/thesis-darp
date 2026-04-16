@@ -1,8 +1,30 @@
 #include "operators/operator_registry.h"
 
+#ifdef DARP_ENABLE_ML
+#include "ml/ml_selector.h"
+#else
+// When built without ML, we still need a complete type for unique_ptr destruction.
+// Provide a minimal stub; set_ml_selector will throw if called.
+class MLSelector {};
+#endif
+
 #include <algorithm>
 #include <numeric>
+#include <stdexcept>
 
+// ---------------------------------------------------------------------------
+// Ctor / dtor / move — defined here so the complete MLSelector type is
+// visible for unique_ptr's destructor/move.
+// ---------------------------------------------------------------------------
+OperatorRegistry::OperatorRegistry() = default;
+OperatorRegistry::~OperatorRegistry() = default;
+OperatorRegistry::OperatorRegistry(OperatorRegistry&&) noexcept = default;
+OperatorRegistry& OperatorRegistry::operator=(OperatorRegistry&&) noexcept = default;
+
+
+// ---------------------------------------------------------------------------
+// Operator registration
+// ---------------------------------------------------------------------------
 void OperatorRegistry::add_destroy(const std::string& name, DestroyOp op) {
     destroy_ops_.emplace_back(name, std::move(op));
     destroy_weights_.push_back(1.0);
@@ -21,6 +43,21 @@ void OperatorRegistry::set_selection_method(SelectionMethod method) {
     method_ = method;
 }
 
+void OperatorRegistry::set_ml_selector(std::unique_ptr<MLSelector> selector) {
+#ifndef DARP_ENABLE_ML
+    (void)selector;
+    throw std::runtime_error(
+        "set_ml_selector: this binary was built without ML support. "
+        "Rebuild with -DENABLE_ML_SELECTION=ON.");
+#else
+    ml_selector_ = std::move(selector);
+#endif
+}
+
+
+// ---------------------------------------------------------------------------
+// Individual selectors (RANDOM / ROULETTE_WHEEL path)
+// ---------------------------------------------------------------------------
 std::pair<int, DestroyOp&> OperatorRegistry::select_destroy(std::mt19937& rng) {
     int idx = 0;
     if (destroy_ops_.size() == 1) {
@@ -47,6 +84,46 @@ std::pair<int, RepairOp&> OperatorRegistry::select_repair(std::mt19937& rng) {
     return {idx, repair_ops_[idx].second};
 }
 
+
+// ---------------------------------------------------------------------------
+// Unified select_pair — dispatch on method
+// ---------------------------------------------------------------------------
+std::pair<int, int> OperatorRegistry::select_pair(
+    std::mt19937& rng,
+    const DARPSolution* sol,
+    const DARPInstance* inst,
+    const ALNSState* alns_state) {
+
+    if (method_ == SelectionMethod::ML_GUIDED) {
+#ifdef DARP_ENABLE_ML
+        if (!ml_selector_) {
+            throw std::runtime_error(
+                "select_pair: ML_GUIDED method set but no MLSelector attached. "
+                "Call set_ml_selector() before solving.");
+        }
+        if (!sol || !inst || !alns_state) {
+            throw std::runtime_error(
+                "select_pair: ML_GUIDED requires non-null solution/instance/alns_state.");
+        }
+        return ml_selector_->select_pair(*sol, *inst, *alns_state, rng);
+#else
+        throw std::runtime_error(
+            "select_pair: ML_GUIDED selected but binary built without ML support. "
+            "Rebuild with -DENABLE_ML_SELECTION=ON.");
+#endif
+    }
+
+    // RANDOM / ROULETTE_WHEEL: independent selection.
+    auto [d_idx, _d] = select_destroy(rng);
+    auto [r_idx, _r] = select_repair(rng);
+    (void)_d; (void)_r;
+    return {d_idx, r_idx};
+}
+
+
+// ---------------------------------------------------------------------------
+// Weight update (roulette wheel only)
+// ---------------------------------------------------------------------------
 void OperatorRegistry::update_weights(int destroy_idx, int repair_idx, double score) {
     if (method_ != SelectionMethod::ROULETTE_WHEEL) return;
 
