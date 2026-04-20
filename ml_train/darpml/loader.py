@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import re
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Iterator
@@ -22,6 +23,8 @@ class LogHeader:
     m_trials: int
     m_trials_every: int
     dynamic: bool
+    max_iterations: int = 0   # for iteration_norm feature (lns_state batch)
+    epoch_length: float = 0.0 # for rolling_horizon batch; parsed from cli_args
 
 
 @dataclass
@@ -42,7 +45,9 @@ class SolverState:
     unassigned: list[int]
     committed: list[int]
     min_insert_pos: list[int]
-    epoch_id: int = 0  # 0 for non-dynamic logs
+    epoch_id: int = 0       # 0 for non-dynamic logs
+    obj_initial: float = 0.0  # objective at the most recent epoch_start (lns_state batch)
+    sim_clock: float = 0.0    # simulation clock at the most recent epoch_start (rolling_horizon batch)
 
 
 @dataclass
@@ -78,7 +83,28 @@ def stream_log(path: str | Path) -> Iterator[tuple[str, dict]]:
             yield rec["type"], rec
 
 
+_EPOCH_LEN_RE = re.compile(r"--epoch-length\s+([0-9]+(?:\.[0-9]+)?)")
+
+
+def _extract_epoch_length(cli_args: str) -> float:
+    """Pull the --epoch-length value out of the cli_args string.
+
+    Solver default is 30s if the flag is absent (see cpp/src/solver_main.cpp).
+    Returns 0.0 for static (non-dynamic) logs that don't have this flag in
+    their CLI; rolling_horizon features never get evaluated on those anyway
+    (they're tagged mode='dynamic' in the registry).
+    """
+    if not cli_args:
+        return 0.0
+    m = _EPOCH_LEN_RE.search(cli_args)
+    if m:
+        return float(m.group(1))
+    # Flag absent: dynamic runs default to 30s.
+    return 30.0 if "--dynamic" in cli_args else 0.0
+
+
 def _parse_header(rec: dict) -> LogHeader:
+    cli_args = rec.get("cli_args", "")
     return LogHeader(
         instance_path=rec.get("instance", ""),
         seed=rec.get("seed", 0),
@@ -93,6 +119,8 @@ def _parse_header(rec: dict) -> LogHeader:
         m_trials=rec.get("m_trials", 0),
         m_trials_every=rec.get("m_trials_every", 0),
         dynamic=rec.get("dynamic", False),
+        max_iterations=rec.get("max_iterations", 0),
+        epoch_length=_extract_epoch_length(cli_args),
     )
 
 
@@ -138,20 +166,30 @@ def load_log(path: str | Path) -> tuple[LogHeader, list[StateTrial]]:
 
     Returns (header, list_of_state_trial_pairs).
     Only iterations that have BOTH a state and trials record are included.
+
+    Each per-iter SolverState gets `epoch_id` and `obj_initial` filled from the
+    most recent epoch_start record (mirrors how solver.cpp captures obj_initial
+    at run/epoch start for the lns_state ML feature batch).
     """
     header: LogHeader | None = None
     states_by_iter: dict[int, SolverState] = {}
     trials_by_iter: dict[int, TrialsRecord] = {}
     current_epoch = 0
+    current_obj_initial = 0.0
+    current_sim_clock = 0.0
 
     for rtype, rec in stream_log(path):
         if rtype == "header":
             header = _parse_header(rec)
         elif rtype == "epoch_start":
             current_epoch = rec["epoch_id"]
+            current_obj_initial = float(rec.get("obj", 0.0))
+            current_sim_clock = float(rec.get("sim_clock", 0.0))
         elif rtype == "state":
             st = _parse_state(rec)
             st.epoch_id = current_epoch
+            st.obj_initial = current_obj_initial
+            st.sim_clock = current_sim_clock
             states_by_iter[st.iter] = st
         elif rtype == "trials":
             tr = _parse_trials(rec)

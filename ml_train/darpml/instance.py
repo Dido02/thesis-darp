@@ -51,6 +51,14 @@ class DARPInstance:
     def dest_depot(self) -> int:
         return 2 * self.num_requests + 1
 
+    def max_ride_time_for(self, request: int) -> float:
+        """Per-request max ride time L. Falls back to global max_ride_time when
+        per_request_ride_times is unset (Cordeau format). Mirrors C++
+        DARPInstance::max_ride_time_for in include/instance.h."""
+        if self.per_request_ride_times:
+            return self.per_request_ride_times[request]
+        return self.max_ride_time
+
 
 # Module-level cache: resolved path -> DARPInstance
 _INSTANCE_CACHE: dict[str, DARPInstance] = {}
@@ -210,11 +218,18 @@ def _parse_cordeau(path: Path) -> DARPInstance:
     total = len(nodes)
     assert total == 2 * num_requests + 2, f"Expected {2*num_requests+2} nodes, got {total}"
 
-    # Euclidean distance matrix
-    coords = np.array([(n.x, n.y) for n in nodes])
-    dx = coords[:, 0:1] - coords[:, 0:1].T
-    dy = coords[:, 1:2] - coords[:, 1:2].T
-    travel_time = np.sqrt(dx**2 + dy**2)
+    # Euclidean distance matrix. We use math.hypot per-pair instead of
+    # np.sqrt(dx**2 + dy**2) because clang on arm64 fuses dx*dx + dy*dy into a
+    # single FMA inside std::sqrt(), giving a different last bit than the
+    # non-FMA numpy path. math.hypot(dx, dy) computes the correctly-rounded
+    # Euclidean distance, which matches the C++ Cordeau parser's FMA-fused
+    # result bit-for-bit. Fiedler instances load tt from a file so they're
+    # unaffected; this matters only for Cordeau-derived features.
+    travel_time = np.zeros((total, total), dtype=np.float64)
+    for i in range(total):
+        ix, iy = nodes[i].x, nodes[i].y
+        for j in range(total):
+            travel_time[i, j] = math.hypot(ix - nodes[j].x, iy - nodes[j].y)
 
     return DARPInstance(
         num_vehicles=K,

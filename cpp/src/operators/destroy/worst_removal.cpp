@@ -1,4 +1,5 @@
 #include "operators/destroy/worst_removal.h"
+#include "operators/cost_helpers.h"
 #include "operators/repair/repair_utils.h"
 
 #include <algorithm>
@@ -28,9 +29,10 @@ static std::vector<int> build_req_to_route(const DARPSolution& sol) {
 }
 
 // ---------------------------------------------------------------------------
-// Helper: compute cost saved by removing request from a known route
+// Helper: compute cost saved by removing request from a known route.
+// Declared in operators/cost_helpers.h so feature extractors share it.
 // ---------------------------------------------------------------------------
-static double removal_cost(const DARPSolution& sol, int req, int route_idx) {
+double removal_cost(const DARPSolution& sol, int req, int route_idx) {
     const auto& tt = sol.instance->travel_time;
     int n = sol.instance->num_requests;
     int pickup_id = req;

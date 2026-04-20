@@ -25,20 +25,24 @@ MLSelector::MLSelector(
     fs::path root(model_dir);
     manifest_ = load_manifest((root / "feature_manifest.json").string());
 
-    // 1. Every manifest feature must exist in the C++ registry.
+    // 1. Validate manifest features against the registry. LEGACY manifests
+    //    only check existence; NEW manifests additionally enforce batch/mode tags.
     const auto& reg = FeatureRegistry::instance();
-    std::vector<std::string> missing_features;
-    for (const auto& name : manifest_.feature_order) {
-        if (!reg.has(name)) missing_features.push_back(name);
-    }
-    if (!missing_features.empty()) {
+    auto validation = validate_manifest_against_registry(manifest_, reg);
+    if (!validation.missing_features.empty()) {
         std::ostringstream oss;
         oss << "ML manifest requires features not registered in C++: [";
-        for (size_t i = 0; i < missing_features.size(); ++i) {
+        for (size_t i = 0; i < validation.missing_features.size(); ++i) {
             if (i) oss << ", ";
-            oss << missing_features[i];
+            oss << validation.missing_features[i];
         }
-        oss << "]. Add them to cpp/src/ml/feature_extractor.cpp with REGISTER_FEATURE.";
+        oss << "]. Add them to cpp/src/ml/feature_extractor.cpp with REGISTER_FEATURE_V2.";
+        throw std::runtime_error(oss.str());
+    }
+    if (!validation.tag_mismatches.empty()) {
+        std::ostringstream oss;
+        oss << "ML manifest features have batch/mode tags that don't match the C++ registry:\n";
+        for (const auto& s : validation.tag_mismatches) oss << "  " << s << "\n";
         throw std::runtime_error(oss.str());
     }
 
@@ -172,20 +176,16 @@ std::pair<int, int> MLSelector::select_pair(
     const ALNSState& st,
     std::mt19937& rng) {
 
-    // 1. Extract all features; fatal if any manifest-required one is missing
-    //    (shouldn't happen since ctor validated, but be defensive).
-    auto features = extract_all_features(sol, inst, st);
+    // 1. Extract only the manifest's feature subset, in the manifest's declared
+    //    order. ctor validated names exist in the registry.
+    auto values = FeatureRegistry::instance().extract_by_names(
+        manifest_.feature_names(), sol, inst, st);
 
     // Cast double -> float at the ONNX tensor boundary. Features are computed in
     // double to match Python/numpy precision; ONNX graphs use float32 inputs.
     std::vector<float> input(manifest_.n_features);
-    for (size_t i = 0; i < manifest_.feature_order.size(); ++i) {
-        auto it = features.find(manifest_.feature_order[i]);
-        if (it == features.end()) {
-            throw std::runtime_error(
-                "C++ feature missing at inference: " + manifest_.feature_order[i]);
-        }
-        input[i] = static_cast<float>(it->second);
+    for (size_t i = 0; i < values.size(); ++i) {
+        input[i] = static_cast<float>(values[i]);
     }
 
     // 2. Run inference for each loaded session in stable order.

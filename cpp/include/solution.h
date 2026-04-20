@@ -44,6 +44,11 @@ public:
     // Full feasibility check on entire solution
     std::pair<bool, std::string> is_feasible() const;
 
+    // Lightweight check: no request appears twice in routes, and no request
+    // is simultaneously in routes AND unassigned. Safe for dynamic mode
+    // (does not require all n requests to be accounted for).
+    std::pair<bool, std::string> check_request_uniqueness() const;
+
     // Objective
     double objective() const;
     double travel_cost() const;

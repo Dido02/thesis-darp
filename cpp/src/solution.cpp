@@ -304,6 +304,34 @@ double DARPSolution::travel_cost() const {
     return total;
 }
 
+std::pair<bool, std::string> DARPSolution::check_request_uniqueness() const {
+    int n = instance->num_requests;
+    std::set<int> seen_pickups, seen_deliveries;
+    for (size_t k = 0; k < routes.size(); ++k) {
+        for (int nid : routes[k]) {
+            if (nid >= 1 && nid <= n) {
+                if (!seen_pickups.insert(nid).second) {
+                    return {false, "Pickup " + std::to_string(nid)
+                        + " appears twice (route " + std::to_string(k) + ")"};
+                }
+            } else if (nid >= n + 1 && nid <= 2 * n) {
+                if (!seen_deliveries.insert(nid).second) {
+                    return {false, "Delivery " + std::to_string(nid)
+                        + " appears twice (route " + std::to_string(k) + ")"};
+                }
+            }
+        }
+    }
+    // Request must not be simultaneously in a route AND in unassigned
+    for (int req : unassigned) {
+        if (seen_pickups.count(req)) {
+            return {false, "Request " + std::to_string(req)
+                + " is in route AND unassigned"};
+        }
+    }
+    return {true, ""};
+}
+
 std::map<int, int> DARPSolution::request_to_route() const {
     int n = instance->num_requests;
     std::map<int, int> mapping;

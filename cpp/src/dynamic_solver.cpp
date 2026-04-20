@@ -140,6 +140,7 @@ void DynamicSolver::greedy_insert_pending() {
                 current_solution_.routes[best_route].insert(
                     current_solution_.routes[best_route].begin() + best_d, req + n);
                 pending_.erase(req);
+                current_solution_.unassigned.erase(req);  // Fix: keep unassigned in sync
                 current_solution_.cached_obj_ = -1.0;
 
                 // Recompute aux data and min_insert_pos for modified route
@@ -215,6 +216,7 @@ void DynamicSolver::greedy_insert_pending() {
                 current_solution_.routes[best_route].insert(
                     current_solution_.routes[best_route].begin() + best_d, req + n);
                 pending_.erase(req);
+                current_solution_.unassigned.erase(req);  // Fix: keep unassigned in sync
                 current_solution_.cached_obj_ = -1.0;
             }
         }
@@ -325,12 +327,16 @@ EpochLog DynamicSolver::run_epoch_alns(int epoch_id) {
 
     // Prepare solution for ALNS
     compute_min_insert_positions();
-    DARPSolution epoch_sol = current_solution_.copy();
 
-    // Add pending requests to unassigned pool
+    // Defensive rebuild: unassigned must be exactly pending_ at ALNS entry.
+    // This self-heals any stale entries from greedy_insert_pending or prior epochs.
+    current_solution_.unassigned.clear();
     for (int req : pending_) {
-        epoch_sol.unassigned.insert(req);
+        current_solution_.unassigned.insert(req);
     }
+
+    DARPSolution epoch_sol = current_solution_.copy();
+    // (unassigned already contains pending_ — no need to re-add)
     // Set committed set — include unreleased requests so destroy operators
     // don't waste time trying to remove requests that aren't in any route
     epoch_sol.committed = committed_;
@@ -369,13 +375,24 @@ EpochLog DynamicSolver::run_epoch_alns(int epoch_id) {
         time_budget,
         solver_params_.unassigned_penalty,
         solver_params_.logger,
-        solver_params_.ml_model_dir);
+        solver_params_.ml_model_dir,
+        sim_clock_,                       // frozen at this epoch's trigger time
+        epoch_config_.epoch_length);      // for rolling_horizon ML features
 
     // Update current solution from ALNS result
     current_solution_ = std::move(result.best);
     // Preserve committed and min_insert_pos
     current_solution_.committed = committed_;
     compute_min_insert_positions();
+
+    // Safety net: crash loudly on corrupt state rather than silently producing
+    // invalid solutions. This check is O(n) per epoch — negligible vs ALNS budget.
+    auto [ok, why] = current_solution_.check_request_uniqueness();
+    if (!ok) {
+        std::cerr << "[dynamic] invariant violated after epoch " << epoch_id
+                  << ": " << why << "\n";
+        throw std::runtime_error("DynamicSolver: request-uniqueness invariant violated");
+    }
 
     // Update pending from ALNS unassigned (anything ALNS couldn't place)
     pending_.clear();
@@ -484,12 +501,16 @@ DynamicResult DynamicSolver::run() {
             trigger_epoch = (new_since_last_epoch_ >= epoch_config_.epoch_request_count);
         }
 
-        // Only trigger if there's something to optimize
+        // Only trigger if there's enough to optimize.
+        // Skip degenerate early epochs where barely any requests are known —
+        // greedy pre-insertion handles those; ALNS budget is wasted on them.
         int total_known = instance_.num_requests - static_cast<int>(unreleased_.size());
         int total_assigned = total_known - static_cast<int>(pending_.size())
                            - static_cast<int>(rejected_.size());
         int assigned_uncommitted = total_assigned - static_cast<int>(committed_.size());
         bool has_work = !pending_.empty() || assigned_uncommitted > 0;
+        constexpr int MIN_REQUESTS_FOR_EPOCH = 10;
+        if (total_known < MIN_REQUESTS_FOR_EPOCH) has_work = false;
 
         if (trigger_epoch && has_work) {
             epoch_id++;

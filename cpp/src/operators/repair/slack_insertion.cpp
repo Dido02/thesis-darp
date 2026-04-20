@@ -1,5 +1,6 @@
 #include "operators/repair/slack_insertion.h"
 #include "operators/repair/repair_utils.h"
+#include "operators/slack_helpers.h"
 #include "feasibility.h"
 #include "feasibility/o1_feasibility.h"
 
@@ -15,10 +16,11 @@ static constexpr double EPS = 1e-6;
 static constexpr double ALPHA = 0.1;
 
 // ---------------------------------------------------------------------------
-// Helper: compute total forward time slack for a route
+// Helper: compute total forward time slack for a route. Declared in
+// operators/slack_helpers.h so feature extractors share the same definition.
 // ---------------------------------------------------------------------------
-static double compute_route_slack(const std::vector<int>& route,
-                                   const DARPInstance& inst) {
+double compute_route_slack(const std::vector<int>& route,
+                            const DARPInstance& inst) {
     const auto& nodes = inst.nodes;
     const auto& tt = inst.travel_time;
     int size = static_cast<int>(route.size());
@@ -60,8 +62,8 @@ static double compute_route_slack(const std::vector<int>& route,
 // ---------------------------------------------------------------------------
 // Helper: compute total travel cost (sum of edge travel times) for a route
 // ---------------------------------------------------------------------------
-static double compute_route_cost(const std::vector<int>& route,
-                                  const DARPInstance& inst) {
+double compute_route_cost(const std::vector<int>& route,
+                           const DARPInstance& inst) {
     double cost = 0.0;
     for (int i = 0; i + 1 < static_cast<int>(route.size()); i++) {
         cost += inst.travel_time[route[i]][route[i + 1]];

@@ -121,10 +121,17 @@ def train_pipeline(
     n_estimators: int = 100,
     test_size: float = 0.25,
     random_state: int = 42,
+    feature_names: list[str] | None = None,
+    mode: str | None = None,
+    batches: list[str] | None = None,
 ) -> TrainingReport:
     """Full training pipeline: load data, train 20 classifiers, save models.
 
     Uses per-log-file train/test split to prevent within-trajectory leakage.
+
+    feature_names, when provided, restricts training to that explicit subset
+    (validated against the parquet columns). mode/batches get recorded in
+    meta.json so export_onnx can emit a new-format manifest.
     """
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -138,7 +145,15 @@ def train_pipeline(
     print(f"Joined dataset: {len(df)} samples")
 
     # Identify feature and label columns
-    feature_names = [c for c in features_df.columns if c not in ("log_file", "iter")]
+    parquet_features = [c for c in features_df.columns if c not in ("log_file", "iter")]
+    if feature_names is None:
+        feature_names = parquet_features
+    else:
+        missing = [n for n in feature_names if n not in parquet_features]
+        if missing:
+            raise ValueError(
+                f"train_pipeline: feature_names contains columns not in parquet: {missing}"
+            )
     label_cols = [c for c in labels_df.columns if c.startswith("pair_")]
 
     X = df[feature_names].values
@@ -218,10 +233,12 @@ def train_pipeline(
     # Try ONNX export (optional)
     _try_onnx_export(models, feature_names, output_dir)
 
-    # Save feature names for inference
+    # Save feature names + mode/batches for downstream ONNX export.
     meta = {
         "feature_names": feature_names,
         "label_columns": sorted(label_cols),
+        "mode": mode,
+        "batches": batches if batches is not None else [],
     }
     with open(output_dir / "meta.json", "w") as f:
         json.dump(meta, f, indent=2)

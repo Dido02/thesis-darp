@@ -2,17 +2,35 @@
 
 Usage:
     python -m darpml validate --logs ../trail_logs/ --data ../data/
-    python -m darpml extract-features --logs ../trail_logs/ --data ../data/ --out cache/features.parquet
-    python -m darpml compute-labels --logs ../trail_logs/ --out cache/labels.parquet
-    python -m darpml train --features cache/features.parquet --labels cache/labels.parquet --out models/
+    python -m darpml extract-features --logs ../trail_logs/ --data ../data/ \
+        --out cache/features.parquet --mode dynamic
+    python -m darpml compute-labels --logs ../trail_logs/ \
+        --out cache/labels.parquet --mode dynamic
+    python -m darpml train --features cache/features.parquet \
+        --labels cache/labels.parquet --out models/ --mode dynamic
 """
 from __future__ import annotations
 
 import argparse
+import json
 import sys
 from pathlib import Path
 
 import pandas as pd
+
+
+def _parse_batches(s: str | None) -> list[str] | None:
+    """Comma-separated string -> list. None or empty stays None (= all batches)."""
+    if not s:
+        return None
+    return [x.strip() for x in s.split(",") if x.strip()]
+
+
+def _validate_mode_batches(mode: str, batches: list[str] | None) -> None:
+    """CLI-level guard: rolling_horizon batch is dynamic-only."""
+    if mode == "static" and batches and "rolling_horizon" in batches:
+        sys.exit("ERROR: --mode static is incompatible with --batches "
+                 "rolling_horizon (rolling_horizon features are dynamic-only).")
 
 
 def cmd_validate(args):
@@ -59,6 +77,12 @@ def cmd_extract_features(args):
     from .instance import InstanceTooLargeError, load_instance
     from .loader import load_log, resolve_instance_path
 
+    batches = _parse_batches(args.batches)
+    _validate_mode_batches(args.mode, batches)
+    feature_names = get_feature_names(batches=batches, mode=args.mode)
+    if not feature_names:
+        sys.exit(f"ERROR: no features matched batches={batches} mode={args.mode}")
+
     logs_dir = Path(args.logs)
     log_files = sorted(logs_dir.glob("*.jsonl"))
     if not log_files:
@@ -69,7 +93,8 @@ def cmd_extract_features(args):
     out_path.parent.mkdir(parents=True, exist_ok=True)
 
     print(f"Extracting features from {len(log_files)} logs")
-    print(f"Features: {get_feature_names()}")
+    print(f"  Mode: {args.mode}, Batches: {batches if batches else 'all'}")
+    print(f"  Features ({len(feature_names)}): {feature_names}")
 
     all_rows = []
     for lf in log_files:
@@ -83,7 +108,8 @@ def cmd_extract_features(args):
 
         n_extracted = 0
         for st in state_trials:
-            feats = extract_all(st.state, instance, header)
+            feats = extract_all(st.state, instance, header,
+                                batches=batches, mode=args.mode)
             feats["log_file"] = lf.name
             feats["iter"] = st.state.iter
             all_rows.append(feats)
@@ -93,7 +119,18 @@ def cmd_extract_features(args):
 
     df = pd.DataFrame(all_rows)
     df.to_parquet(out_path, index=False)
+
+    # Sidecar manifest so train/export_onnx can verify mode + batches without
+    # re-reading the registry. Lives alongside the parquet.
+    sidecar = out_path.with_suffix(out_path.suffix + ".meta.json")
+    with open(sidecar, "w") as f:
+        json.dump({
+            "mode": args.mode,
+            "batches": batches if batches else [],
+            "feature_names": feature_names,
+        }, f, indent=2)
     print(f"\nSaved {len(df)} rows to {out_path}")
+    print(f"Sidecar metadata: {sidecar}")
 
 
 def cmd_compute_labels(args):
@@ -115,7 +152,8 @@ def cmd_compute_labels(args):
 
     filter_epoch_1 = not args.keep_epoch_1
     print(f"Computing labels from {len(log_files)} logs")
-    print(f"  Rule: {args.rule}, threshold: {args.threshold}, filter_epoch_1: {filter_epoch_1}")
+    print(f"  Mode: {args.mode}, Rule: {args.rule}, threshold: {args.threshold}, "
+          f"filter_epoch_1: {filter_epoch_1}")
 
     all_rows = []
     total_epoch1 = 0
@@ -156,6 +194,7 @@ def cmd_compute_labels(args):
         b"rule": args.rule.encode(),
         b"threshold": str(args.threshold).encode(),
         b"filter_epoch_1": str(filter_epoch_1).encode(),
+        b"mode": args.mode.encode(),
     }
     existing_meta = table.schema.metadata or {}
     table = table.replace_schema_metadata({**existing_meta, **meta})
@@ -167,13 +206,52 @@ def cmd_compute_labels(args):
 
 def cmd_train(args):
     """Train 20 RF classifiers."""
+    from .features import get_feature_names
     from .training import train_pipeline
+
+    batches = _parse_batches(args.batches)
+    _validate_mode_batches(args.mode, batches)
+
+    # 1. Verify the requested batches/mode produce a non-empty feature set in the registry.
+    expected_names = get_feature_names(batches=batches, mode=args.mode)
+    if not expected_names:
+        sys.exit(f"ERROR: no features matched batches={batches} mode={args.mode}")
+
+    # 2. If the features parquet has a sidecar metadata file, verify it agrees
+    #    with the requested mode/batches. Otherwise just check that all expected
+    #    feature columns are present in the parquet.
+    features_path = Path(args.features)
+    sidecar = features_path.with_suffix(features_path.suffix + ".meta.json")
+    if sidecar.exists():
+        with open(sidecar) as f:
+            sm = json.load(f)
+        sm_mode = sm.get("mode")
+        sm_batches = sm.get("batches") or None
+        if sm_mode != args.mode or sm_batches != (batches if batches else []):
+            sys.exit(
+                f"ERROR: features parquet was extracted with mode={sm_mode} "
+                f"batches={sm_batches}, but train was called with mode={args.mode} "
+                f"batches={batches if batches else []}. Re-run extract-features."
+            )
+    else:
+        df = pd.read_parquet(features_path, columns=None)
+        actual_cols = set(df.columns) - {"log_file", "iter"}
+        missing = [n for n in expected_names if n not in actual_cols]
+        if missing:
+            sys.exit(
+                f"ERROR: features parquet missing columns required by "
+                f"mode={args.mode} batches={batches if batches else 'all'}: {missing}. "
+                f"Re-run extract-features with the same flags."
+            )
 
     report = train_pipeline(
         features_path=args.features,
         labels_path=args.labels,
         output_dir=args.out,
         n_estimators=args.n_estimators,
+        feature_names=expected_names,
+        mode=args.mode,
+        batches=batches if batches else [],
     )
 
     print(f"\n{'='*60}")
@@ -202,14 +280,6 @@ def cmd_train(args):
               f"{m.always1_f1:6.3f} {m.f1_lift:+7.3f} "
               f"{m.n_positive_train:5d}/{m.n_train}")
 
-    print(f"\nCompared to previous pipeline (SA-acceptance rule, per-row split):")
-    print(f"  Old: median F1=0.993 (per-row), always-1 baseline F1=0.980 -> inflated")
-    new_median_f1 = float(
-        __import__("numpy").median([m.f1 for m in report.pair_metrics])
-    )
-    print(f"  New: median F1={new_median_f1:.3f} (per-log), "
-          f"non-degenerate median lift={report.median_f1_lift:+.3f}")
-
 
 def main():
     parser = argparse.ArgumentParser(prog="darpml", description="ML-guided ALNS operator selection")
@@ -226,11 +296,17 @@ def main():
     p.add_argument("--logs", required=True)
     p.add_argument("--data", required=True)
     p.add_argument("--out", required=True)
+    p.add_argument("--mode", required=True, choices=["static", "dynamic"],
+                   help="Solver mode (filters which features are extracted)")
+    p.add_argument("--batches", default=None,
+                   help="Comma-separated batch names (default: all registered batches)")
 
     # compute-labels
     p = subparsers.add_parser("compute-labels", help="Compute labels to parquet")
     p.add_argument("--logs", required=True)
     p.add_argument("--out", required=True)
+    p.add_argument("--mode", required=True, choices=["static", "dynamic"],
+                   help="Solver mode (recorded in parquet metadata)")
     p.add_argument("--rule", choices=["improvement_freq", "sa_acceptance"],
                    default="improvement_freq",
                    help="Labeling rule (default: improvement_freq)")
@@ -245,6 +321,10 @@ def main():
     p.add_argument("--labels", required=True)
     p.add_argument("--out", required=True)
     p.add_argument("--n-estimators", type=int, default=100)
+    p.add_argument("--mode", required=True, choices=["static", "dynamic"],
+                   help="Solver mode (must match the features parquet)")
+    p.add_argument("--batches", default=None,
+                   help="Comma-separated batch names (default: all registered batches)")
 
     args = parser.parse_args()
     if args.command is None:

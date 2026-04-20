@@ -71,12 +71,34 @@ def main():
     out_dir = Path(args.out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    # Load meta.json to get feature_names (sorted — canonical order)
+    # Load meta.json — produced by training.py. Carries feature_names (in the
+    # exact training-time column order), label_columns, and the mode + batches
+    # that were used to extract those features.
     meta_path = models_dir / "meta.json"
     with open(meta_path) as f:
         meta = json.load(f)
     feature_names = meta["feature_names"]
     label_columns = meta["label_columns"]
+    mode = meta.get("mode")
+    batches = meta.get("batches", [])
+
+    # Pull each feature's batch + mode + tolerance straight from the registry —
+    # single source of truth, can't drift from training because both reference
+    # the same _REGISTRY.
+    from darpml.features import _REGISTRY  # noqa: PLC0415
+    feature_meta = []
+    for name in feature_names:
+        if name not in _REGISTRY:
+            sys.exit(f"ERROR: feature {name!r} listed in meta.json is not "
+                     f"registered. Did the registry change between training "
+                     f"and export?")
+        e = _REGISTRY[name]
+        feature_meta.append({
+            "name": name,
+            "batch": e.batch,
+            "mode": e.mode,
+            "tolerance": e.tolerance,
+        })
 
     # Verify we have 20 models in pair_{d}_{r} form
     n_d = len(DESTROY_OPS)
@@ -120,13 +142,21 @@ def main():
             f.write(onnx_model.SerializeToString())
         print(f"  {col} -> {onnx_path.name}")
 
-    # Write manifest
-    # CRITICAL: feature_order must match meta.json's feature_names exactly —
-    # that is the order the RandomForests were trained with (DataFrame column
-    # order = registry insertion order at training time). We do NOT sort here.
+    # Write manifest. Emits NEW format (mode + batches + features as objects)
+    # AND keeps the legacy feature_order (bare strings) so any older C++ build
+    # using load_manifest's legacy path keeps working.
+    # CRITICAL: order in `features` and `feature_order` must match feature_names
+    # exactly — that's the order the RandomForests were trained with (DataFrame
+    # column order = registry insertion order at training time).
+    if mode is None:
+        sys.exit("ERROR: meta.json has no 'mode' — retrain with the latest "
+                 "darpml CLI which writes mode/batches into meta.json.")
     repo_root = Path(__file__).resolve().parent.parent
     manifest = {
-        "feature_order": list(feature_names),  # preserve training-time order
+        "mode": mode,
+        "batches": batches,
+        "features": feature_meta,
+        "feature_order": list(feature_names),  # legacy compat
         "n_features": len(feature_names),
         "model_version": make_version_string(repo_root),
         "destroy_ops": DESTROY_OPS,
@@ -137,6 +167,7 @@ def main():
         json.dump(manifest, f, indent=2)
     print(f"\nManifest: {manifest_path}")
     print(f"Model version: {manifest['model_version']}")
+    print(f"Manifest mode: {mode}, batches: {batches if batches else 'all'}")
 
 
 if __name__ == "__main__":

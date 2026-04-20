@@ -34,7 +34,9 @@ SolverResult solve(
     ALNSLogger* logger = nullptr,
     const std::string& ml_model_dir = "");
 
-// Warm-start ALNS: skip initial solution construction, use provided solution
+// Warm-start ALNS: skip initial solution construction, use provided solution.
+// sim_clock and epoch_length are passed through to ALNSState so rolling_horizon
+// ML features can read them. Both default to 0.0 (irrelevant for static runs).
 SolverResult solve_warm(
     const DARPInstance& instance,
     const DARPSolution& initial_solution,
@@ -50,4 +52,6 @@ SolverResult solve_warm(
     double time_limit = 0.0,
     double unassigned_penalty = 1000.0,
     ALNSLogger* logger = nullptr,
-    const std::string& ml_model_dir = "");
+    const std::string& ml_model_dir = "",
+    double sim_clock = 0.0,
+    double epoch_length = 0.0);

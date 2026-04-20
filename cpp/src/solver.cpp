@@ -361,6 +361,8 @@ SolverResult solve(
     double best_obj = best.objective();
     DARPSolution current = init_sol.copy();
     double current_obj = current.objective();
+    const double obj_initial = current_obj;  // run-start objective for ML features
+    int last_q = 0;                          // tracks q across iterations for ALNSState
 
     // Operator usage stats
     std::vector<int> destroy_count(registry.num_destroy(), 0);
@@ -425,8 +427,17 @@ SolverResult solve(
                 }
             }
         }
-        // Select operators (unified dispatch: RANDOM / ROULETTE / ML_GUIDED)
-        ALNSState alns_state{temperature, sa_start_temp};
+        // Select operators (unified dispatch: RANDOM / ROULETTE / ML_GUIDED).
+        // last_q is the q from the PREVIOUS iter's destroy (0 at iter 0); ML
+        // features see this slightly-lagged value because the next iter's q
+        // isn't known until destroy runs. Static solve passes 0/0 for the
+        // rolling_horizon fields (mode='dynamic' features won't read them).
+        ALNSState alns_state{
+            temperature, sa_start_temp,
+            last_q, iter, max_iterations,
+            obj_initial, best_obj,
+            0.0, 0.0,
+        };
         auto [d_idx, r_idx] = registry.select_pair(rng, &current, &instance, &alns_state);
         const auto& destroy = registry.get_destroy(d_idx);
         const auto& repair  = registry.get_repair(r_idx);
@@ -448,12 +459,11 @@ SolverResult solve(
         auto t_destroy = Clock::now();
         DARPSolution destroyed = destroy(current, rng);
 
-        // Hook C: compute q
-        int q = 0;
-        if (logger) {
-            q = static_cast<int>(destroyed.unassigned.size())
+        // Hook C: compute q (always — ML features need it carried into the
+        // next iteration's ALNSState, regardless of whether logging is on).
+        int q = static_cast<int>(destroyed.unassigned.size())
               - static_cast<int>(current.unassigned.size());
-        }
+        last_q = q;
 
         auto t_repair = Clock::now();
         DARPSolution candidate = repair(destroyed, rng);
@@ -618,7 +628,9 @@ SolverResult solve_warm(
     double time_limit,
     double unassigned_penalty,
     ALNSLogger* logger,
-    const std::string& ml_model_dir) {
+    const std::string& ml_model_dir,
+    double sim_clock,
+    double epoch_length) {
 
     using Clock = std::chrono::high_resolution_clock;
 
@@ -648,6 +660,8 @@ SolverResult solve_warm(
     double best_obj = best.objective();
     DARPSolution current = init_sol.copy();
     double current_obj = current.objective();
+    const double obj_initial = current_obj;  // epoch-start objective for ML features
+    int last_q = 0;                          // tracks q across iterations for ALNSState
 
     std::vector<int> destroy_count(registry.num_destroy(), 0);
     std::vector<int> repair_count(registry.num_repair(), 0);
@@ -694,8 +708,16 @@ SolverResult solve_warm(
             }
         }
 
-        // Select operators (unified dispatch: RANDOM / ROULETTE / ML_GUIDED)
-        ALNSState alns_state{temperature, sa_start_temp};
+        // Select operators (unified dispatch: RANDOM / ROULETTE / ML_GUIDED).
+        // last_q is the q from the PREVIOUS iter's destroy (0 at iter 0).
+        // sim_clock and epoch_length come from the dynamic_solver caller
+        // (frozen at this epoch's trigger time; 0/0 if the caller is static).
+        ALNSState alns_state{
+            temperature, sa_start_temp,
+            last_q, iter, max_iterations,
+            obj_initial, best_obj,
+            sim_clock, epoch_length,
+        };
         auto [d_idx, r_idx] = registry.select_pair(rng, &current, &instance, &alns_state);
         const auto& destroy = registry.get_destroy(d_idx);
         const auto& repair  = registry.get_repair(r_idx);
@@ -715,12 +737,10 @@ SolverResult solve_warm(
         auto t_d0 = Clock::now();
         DARPSolution destroyed = destroy(current, rng);
 
-        // Hook C: compute q
-        int q = 0;
-        if (logger) {
-            q = static_cast<int>(destroyed.unassigned.size())
+        // Hook C: compute q (always — needed by next iter's ALNSState).
+        int q = static_cast<int>(destroyed.unassigned.size())
               - static_cast<int>(current.unassigned.size());
-        }
+        last_q = q;
 
         auto t_d1 = Clock::now();
         DARPSolution candidate = repair(destroyed, rng);
