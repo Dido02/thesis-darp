@@ -38,6 +38,7 @@ struct EpochLog {
     int avg_feas_checks = 0;
     double aux_precompute_ms = 0.0;
     double greedy_preinsert_ms = 0.0;
+    double selection_time_ms = 0.0;  // wall time spent in select_pair (ML inference dominates)
 };
 
 struct DynamicResult {
@@ -62,6 +63,12 @@ struct SolverParams {
     double unassigned_penalty = 1000.0;
     int top_n_routes = 0;  // limit repair to N nearest routes (0 = no limit)
     bool dynamic_stats = false;  // print per-epoch performance stats
+    bool exclude_selection_from_budget = false;  // subtract operator-selection
+                                                  // wall time (e.g. ML ONNX
+                                                  // inference) from epoch budget
+                                                  // so ALNS gets the same
+                                                  // compute regardless of
+                                                  // selection strategy.
     ALNSLogger* logger = nullptr;  // non-owning, nullable
     std::string ml_model_dir;  // empty = no ML; required when selection_config == "ml"
 };

@@ -35,7 +35,11 @@ static void print_usage(const char* prog) {
               << "  --epoch-requests N   Epoch trigger after N new requests (overrides --epoch-length)\n"
               << "  --epoch-budget-ms MS ALNS wall-clock budget per epoch in ms (default: 5000)\n"
               << "  --top-n-routes N   Limit repair to N nearest routes per request (default: 0 = all)\n"
-              << "  --dynamic-stats    Print per-epoch performance stats\n";
+              << "  --dynamic-stats    Print per-epoch performance stats\n"
+              << "  --exclude-selection-from-budget  Subtract operator-selection wall time\n"
+              << "                                   (e.g. ML inference) from the epoch budget,\n"
+              << "                                   so ALNS gets the same compute regardless of\n"
+              << "                                   which selection strategy is used.\n";
 }
 
 // Write route schedules to file (shared by static and dynamic paths)
@@ -93,6 +97,7 @@ int main(int argc, char* argv[]) {
     double epoch_budget_ms = 5000.0;
     int top_n_routes = 0;     // 0 = no limit
     bool dynamic_stats = false;
+    bool exclude_selection_from_budget = false;
 
     // Logging options
     bool log_state = false;
@@ -148,6 +153,8 @@ int main(int argc, char* argv[]) {
             top_n_routes = std::stoi(argv[++i]);
         } else if (arg == "--dynamic-stats") {
             dynamic_stats = true;
+        } else if (arg == "--exclude-selection-from-budget") {
+            exclude_selection_from_budget = true;
         } else if (arg == "--log-state") {
             log_state = true;
         } else if (arg == "--log-trials") {
@@ -270,6 +277,7 @@ int main(int argc, char* argv[]) {
         sp.unassigned_penalty = penalty;
         sp.top_n_routes = top_n_routes;
         sp.dynamic_stats = dynamic_stats;
+        sp.exclude_selection_from_budget = exclude_selection_from_budget;
         sp.logger = logger;
         sp.ml_model_dir = ml_model_dir;
 
@@ -287,7 +295,8 @@ int main(int argc, char* argv[]) {
         SolverResult result = solve(inst, iterations, sa_start, sa_end, seed, true,
                                     feasibility_mode, destroy_config, repair_config,
                                     selection_config, time_limit, penalty, init_sort,
-                                    logger, ml_model_dir);
+                                    logger, ml_model_dir,
+                                    exclude_selection_from_budget);
 
         std::cout << "\nFinal objective: " << result.best.objective() << "\n";
         std::cout << "Travel cost:     " << result.best.travel_cost() << "\n";

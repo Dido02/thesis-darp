@@ -15,6 +15,8 @@ struct SolverResult {
     double total_destroy_time = 0.0;
     double total_repair_time = 0.0;
     double total_other_time = 0.0;
+    double total_selection_time = 0.0;  // wall time spent in registry.select_pair
+                                        // (ML inference dominates; roulette ≈ 0)
 };
 
 SolverResult solve(
@@ -32,7 +34,8 @@ SolverResult solve(
     double unassigned_penalty = 1000.0,
     const std::string& init_sort = "slack",
     ALNSLogger* logger = nullptr,
-    const std::string& ml_model_dir = "");
+    const std::string& ml_model_dir = "",
+    bool exclude_selection_from_budget = false);
 
 // Warm-start ALNS: skip initial solution construction, use provided solution.
 // sim_clock and epoch_length are passed through to ALNSState so rolling_horizon
@@ -54,4 +57,5 @@ SolverResult solve_warm(
     ALNSLogger* logger = nullptr,
     const std::string& ml_model_dir = "",
     double sim_clock = 0.0,
-    double epoch_length = 0.0);
+    double epoch_length = 0.0,
+    bool exclude_selection_from_budget = false);

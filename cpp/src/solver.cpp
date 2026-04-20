@@ -295,7 +295,8 @@ SolverResult solve(
     double unassigned_penalty,
     const std::string& init_sort,
     ALNSLogger* logger,
-    const std::string& ml_model_dir) {
+    const std::string& ml_model_dir,
+    bool exclude_selection_from_budget) {
 
     using Clock = std::chrono::high_resolution_clock;
 
@@ -390,6 +391,9 @@ SolverResult solve(
     std::set<int> pre_committed;
     std::vector<int> pre_min_insert_pos;
     double total_logging_time = 0.0;
+    double total_selection_time = 0.0;  // always tracked so callers can report
+                                        // it; only excluded from the budget if
+                                        // exclude_selection_from_budget is set.
 
     int final_iter = 0;
     for (int iter = 0; iter < max_iterations; iter++) {
@@ -398,7 +402,8 @@ SolverResult solve(
         if (time_limit > 0.0) {
             auto now = Clock::now();
             double elapsed = std::chrono::duration<double>(now - solve_t0).count()
-                           - total_logging_time;
+                           - total_logging_time
+                           - (exclude_selection_from_budget ? total_selection_time : 0.0);
             if (elapsed >= time_limit) {
                 if (verbose) {
                     std::cout << "  Time limit reached at iter " << iter
@@ -438,7 +443,9 @@ SolverResult solve(
             obj_initial, best_obj,
             0.0, 0.0,
         };
+        auto t_sel0 = Clock::now();
         auto [d_idx, r_idx] = registry.select_pair(rng, &current, &instance, &alns_state);
+        total_selection_time += std::chrono::duration<double>(Clock::now() - t_sel0).count();
         const auto& destroy = registry.get_destroy(d_idx);
         const auto& repair  = registry.get_repair(r_idx);
 
@@ -601,13 +608,18 @@ SolverResult solve(
         ? best.copy()
         : repair_ride_times(best, verbose);
 
-    return SolverResult{
+    SolverResult result{
         std::move(repaired),
         std::move(init_sol),
         construction_time,
         solve_time,
         final_iter
     };
+    result.total_destroy_time = total_destroy_time;
+    result.total_repair_time = total_repair_time;
+    result.total_other_time = total_other_time;
+    result.total_selection_time = total_selection_time;
+    return result;
 }
 
 // ---------------------------------------------------------------------------
@@ -630,7 +642,8 @@ SolverResult solve_warm(
     ALNSLogger* logger,
     const std::string& ml_model_dir,
     double sim_clock,
-    double epoch_length) {
+    double epoch_length,
+    bool exclude_selection_from_budget) {
 
     using Clock = std::chrono::high_resolution_clock;
 
@@ -683,7 +696,10 @@ SolverResult solve_warm(
     std::set<int> pre_unassigned;
     std::set<int> pre_committed;
     std::vector<int> pre_min_insert_pos;
-    double total_logging_time = 0.0;  // excludes logging/trial time from budget
+    double total_logging_time = 0.0;    // excludes logging/trial time from budget
+    double total_selection_time = 0.0;  // always tracked; only excluded from the
+                                        // budget if exclude_selection_from_budget
+                                        // is set. ML inference dominates this.
 
     for (int iter = 0; iter < max_iterations; iter++) {
         final_iter = iter + 1;
@@ -691,7 +707,8 @@ SolverResult solve_warm(
         if (time_limit > 0.0) {
             auto now = Clock::now();
             double elapsed = std::chrono::duration<double>(now - solve_t0).count()
-                           - total_logging_time;
+                           - total_logging_time
+                           - (exclude_selection_from_budget ? total_selection_time : 0.0);
             if (elapsed >= time_limit) break;
 
             if (!sa_calibrated && iter == 10 && elapsed > 0.0) {
@@ -718,7 +735,9 @@ SolverResult solve_warm(
             obj_initial, best_obj,
             sim_clock, epoch_length,
         };
+        auto t_sel0 = Clock::now();
         auto [d_idx, r_idx] = registry.select_pair(rng, &current, &instance, &alns_state);
+        total_selection_time += std::chrono::duration<double>(Clock::now() - t_sel0).count();
         const auto& destroy = registry.get_destroy(d_idx);
         const auto& repair  = registry.get_repair(r_idx);
         destroy_count[d_idx]++;
@@ -820,7 +839,7 @@ SolverResult solve_warm(
         ? best.copy()
         : repair_ride_times(best, verbose);
 
-    return SolverResult{
+    SolverResult result{
         std::move(repaired),
         std::move(init_sol),
         0.0,  // no construction time for warm start
@@ -830,4 +849,6 @@ SolverResult solve_warm(
         w_total_repair_time,
         solve_time - w_total_destroy_time - w_total_repair_time
     };
+    result.total_selection_time = total_selection_time;
+    return result;
 }

@@ -377,7 +377,8 @@ EpochLog DynamicSolver::run_epoch_alns(int epoch_id) {
         solver_params_.logger,
         solver_params_.ml_model_dir,
         sim_clock_,                       // frozen at this epoch's trigger time
-        epoch_config_.epoch_length);      // for rolling_horizon ML features
+        epoch_config_.epoch_length,       // for rolling_horizon ML features
+        solver_params_.exclude_selection_from_budget);
 
     // Update current solution from ALNS result
     current_solution_ = std::move(result.best);
@@ -435,6 +436,7 @@ EpochLog DynamicSolver::run_epoch_alns(int epoch_id) {
     log.avg_feas_checks = static_cast<int>(DynamicStats::feas_checks / iters);
     log.aux_precompute_ms = DynamicStats::aux_precompute_ms;
     log.greedy_preinsert_ms = greedy_preinsert_ms_;
+    log.selection_time_ms = result.total_selection_time * 1000.0;
     greedy_preinsert_ms_ = 0.0;  // reset for next epoch
 
     return log;
@@ -537,7 +539,8 @@ DynamicResult DynamicSolver::run() {
                               << "/" << static_cast<int>(current_solution_.routes.size())
                               << " feas_checks=" << log.avg_feas_checks << "/iter"
                               << " aux=" << static_cast<int>(log.aux_precompute_ms) << "ms"
-                              << " greedy=" << static_cast<int>(log.greedy_preinsert_ms) << "ms";
+                              << " greedy=" << static_cast<int>(log.greedy_preinsert_ms) << "ms"
+                              << " selection=" << static_cast<int>(log.selection_time_ms) << "ms";
                     // Per-repair-operator timing
                     std::cout << "\n| repair_ops:";
                     if (DynamicStats::repair_greedy_count > 0)

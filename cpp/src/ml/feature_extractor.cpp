@@ -4,7 +4,7 @@
 // ml_train/darpml/features.py. Adding a feature requires both sides + parity
 // fixture regeneration; see CLAUDE.md "How to add a batch".
 //
-// 21 features across 5 batches:
+// 20 features across 5 batches:
 //
 //   feature                          batch            mode       tol     source
 //   -------------------------------- ---------------- ---------- ------- ----------
@@ -28,7 +28,8 @@
 //   unassigned_count                 lns_state        both       0.0     novel
 //   committed_travel_time_frac       rolling_horizon  dynamic    0.0     novel
 //   horizon_elapsed_frac             rolling_horizon  dynamic    0.0     Bongiovanni #2
-//   flexibility_horizon              rolling_horizon  dynamic    0.0     novel
+//
+// `flexibility_horizon` was removed after diagnostic — see THESIS_NOTES.md.
 //
 // Bongiovanni numbering follows their 2022 paper's 46-feature catalogue.
 // `mode` semantics: features tagged `dynamic` are stripped from static-mode
@@ -580,10 +581,6 @@ REGISTER_FEATURE_V2("unassigned_count", "lns_state", "both", 0.0,
 // ML ablation in the thesis.
 // ===========================================================================
 
-// Multiplier for flexibility_horizon's normalization constant. Must match
-// Python HORIZON_CONSTANT_MULT.
-static constexpr int HORIZON_CONSTANT_MULT = 10;
-
 // committed_travel_time_frac — TT along committed prefixes / TT total.
 // Numerator iterates each route's edges 0..min_insert_pos[r]-2; denominator
 // iterates all edges. Mirrors Python exactly. 0.0 if denominator is 0.
@@ -632,22 +629,9 @@ static double feat_horizon_elapsed_frac(
 REGISTER_FEATURE_V2("horizon_elapsed_frac", "rolling_horizon", "dynamic",
                      0.0, feat_horizon_elapsed_frac)
 
-// flexibility_horizon — mean of (pickup_tw_start - sim_clock) / HORIZON_CONSTANT
-// over active requests, with each contribution clipped to >= 0. 0.0 if no
-// actives or horizon_constant is 0.
-static double feat_flexibility_horizon(
-    const DARPSolution& sol, const DARPInstance& inst, const ALNSState& st) {
-    double horizon_constant = st.epoch_length * HORIZON_CONSTANT_MULT;
-    if (horizon_constant == 0.0) return 0.0;
-    auto pickups = get_active_pickups(sol, inst.num_requests);
-    if (pickups.empty()) return 0.0;
-    double total = 0.0;
-    for (int nid : pickups) {
-        double raw = inst.nodes[nid].earliest - st.sim_clock;
-        if (raw < 0.0) raw = 0.0;
-        total += raw / horizon_constant;
-    }
-    return total / static_cast<double>(pickups.size());
-}
-REGISTER_FEATURE_V2("flexibility_horizon", "rolling_horizon", "dynamic",
-                     0.0, feat_flexibility_horizon)
+// flexibility_horizon was removed after the first 21-feature training run.
+// Diagnostic on cache_v2_dynamic showed it was structurally degenerate:
+// constant 0 across all 13,762 sampled rows because Manhattan dynamic logs
+// only fire epochs (MIN_REQUESTS_FOR_EPOCH gating) AFTER all active pickups'
+// time windows have already opened. Documented under "Resolved methodology
+// findings" in THESIS_NOTES.md.
