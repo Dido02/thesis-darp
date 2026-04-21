@@ -68,7 +68,38 @@ fixtures with computed (rather than file-loaded) instances are needed to surface
 this class of bug — file-loaded instances are bit-identical and would silently
 hide the divergence.
 
-## 3. `time_to_next_epoch_norm` was a degenerate spec
+## 3. `flexibility_horizon` was structurally degenerate on Manhattan dynamic logs
+
+**Context.** The Part 5 `rolling_horizon` batch shipped with `flexibility_horizon`
+= mean over active pickups of `max(0, pickup_tw_start - sim_clock) /
+HORIZON_CONSTANT`, intended to capture how much remaining horizon there was
+before each active pickup's window opens. After the first 21-feature training
+run, a feature-distribution diagnostic on the resulting 13,762-row parquet
+showed the feature was constant 0 across every single row. Tracing it: the
+dynamic solver only fires an epoch when at least
+`MIN_REQUESTS_FOR_EPOCH=10` requests have been released, and by that point all
+"active" pickup nodes (in routes but not committed) have had their time
+windows already opened — sim_clock has moved past every active pickup's
+`earliest`. The clip-to-0-for-negative branch fires for every contribution,
+so the mean is always 0. Confirmed empirically on the 02_min log:
+`sim_clock=65070`, all 55 active pickup `earliests ∈ [64891, 64920]`. Removed
+from the registry rather than reformulated; the original feature carried zero
+information on this dataset and was diluting RF splits. Reformulation ideas
+(time to window CLOSE: `(latest - sim_clock) / HORIZON`; or scheduler-derived
+slack-until-actual-pickup) are deferred to a future feature batch.
+
+**Implication for the thesis.** Features that look meaningful in static-DARP
+formulations can become structurally degenerate in rolling-horizon settings
+when the gating logic for epoch firing systematically delays evaluation past
+the feature's informative regime. The methodology chapter should make this
+generalizable: in dynamic settings, every proposed feature should be
+distribution-checked on real extracted data before it's accepted into the
+production set, not just verified for parity. The four constant-0 / mostly-0
+features surfaced in this diagnostic (one structurally degenerate, two
+real-world-rare, one near-constant) provide concrete examples for that
+methodology recommendation.
+
+## 4. `time_to_next_epoch_norm` was a degenerate spec
 
 **Context.** The Part 5 plan called for a feature
 `time_to_next_epoch_norm = (next_epoch_time - sim_clock) / epoch_length` to give
@@ -98,7 +129,7 @@ process, not an optional sanity check.
 
 # Live system properties
 
-## 4. `current_q` 1-iteration lag from solver loop ordering
+## 5. `current_q` 1-iteration lag from solver loop ordering
 
 **Context.** The `lns_state` feature `neighborhood_size_frac = q / q_max` needs
 the destroy operator's neighborhood-size parameter `q` at feature evaluation

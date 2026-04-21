@@ -22,7 +22,7 @@ thesis-darp/
 │   │   ├── operators/            # 6 destroy + 6 repair operators
 │   │   ├── feasibility/          # O(1) feasibility check (Gschwind & Drexl 2016)
 │   │   ├── ml/                   # ML integration layer
-│   │   │   ├── feature_extractor.cpp   # 21 features with REGISTER_FEATURE_V2 macro
+│   │   │   ├── feature_extractor.cpp   # 20 features with REGISTER_FEATURE_V2 macro
 │   │   │   ├── ml_selector.cpp         # ONNX inference + weighted pair sampling
 │   │   │   └── manifest.cpp            # JSON manifest parser
 │   │   └── logging/              # JSONL trial/state logger for training data
@@ -34,7 +34,7 @@ thesis-darp/
 │
 ├── ml_train/                     # Python ML training pipeline
 │   ├── darpml/
-│   │   ├── features.py           # 21 features with @register_feature decorator
+│   │   ├── features.py           # 20 features with @register_feature decorator
 │   │   ├── labels.py             # Improvement-frequency labeling (threshold=0.3)
 │   │   ├── training.py           # 20 RF classifiers, per-log-file split, baseline metrics
 │   │   ├── loader.py             # JSONL log parser with epoch_id tracking
@@ -144,7 +144,7 @@ This gives mean positive rate ~0.40 with 9/20 pairs in the balanced [0.3, 0.7] r
 
 ### Feature batches
 
-21 features across 5 named, toggleable batches. Each feature is registered with three pieces of metadata: `batch` (string tag for subset selection), `mode` (`"static"`, `"dynamic"`, or `"both"` — restricts which solver mode the feature is meaningful in), and `tolerance` (per-feature parity threshold; 0.0 for sums/ratios/counts, 1e-12 for variance/std-dev). The registry is the single source of truth — `export_onnx.py` reads it, `export_parity_states.py` reads it, and the parity fixture's per-feature tolerances flow from it.
+20 features across 5 named, toggleable batches. Each feature is registered with three pieces of metadata: `batch` (string tag for subset selection), `mode` (`"static"`, `"dynamic"`, or `"both"` — restricts which solver mode the feature is meaningful in), and `tolerance` (per-feature parity threshold; 0.0 for sums/ratios/counts, 1e-12 for variance/std-dev). The registry is the single source of truth — `export_onnx.py` reads it, `export_parity_states.py` reads it, and the parity fixture's per-feature tolerances flow from it.
 
 | Batch | Count | Mode coverage | Purpose |
 |-------|-------|---------------|---------|
@@ -152,7 +152,7 @@ This gives mean positive rate ~0.40 with 9/20 pairs in the balanced [0.3, 0.7] r
 | `tightness` | 5 | both | Surface how close to ride-time / time-window violations the solution is. Targets `rtcritical` and `lowslack` operators. |
 | `worst_support` | 3 | both | Dispersion of per-request and per-route cost contributions. Discriminative signal for `worst_destroy`. |
 | `lns_state` | 5 | both | Adaptation of Bongiovanni 2022's top-importance LNS state descriptors plus request-bank count. |
-| `rolling_horizon` | 3 | dynamic-only | Dynamic-DARP state the static-mode model can't observe. Basis for the static-vs-dynamic ablation. |
+| `rolling_horizon` | 2 | dynamic-only | Dynamic-DARP state the static-mode model can't observe. Basis for the static-vs-dynamic ablation. Originally 3 features; `flexibility_horizon` was removed after diagnostic — see THESIS_NOTES.md. |
 
 Full per-feature listing (with batch, mode, tolerance, and Bongiovanni attribution) lives at the top of [cpp/src/ml/feature_extractor.cpp](cpp/src/ml/feature_extractor.cpp) and in the [ml_train/darpml/features.py](ml_train/darpml/features.py) module docstring — single source of truth, kept in sync.
 
@@ -168,7 +168,7 @@ The mode tag governs **model applicability**, not per-state computation. Feature
 
 Two model variants ship from the same code:
 
-**Dynamic** (all 5 batches, 21 features):
+**Dynamic** (all 5 batches, 20 features):
 ```bash
 cd ml_train
 python -m darpml extract-features --logs ../trail_logs/ --data ../data/ \
@@ -238,11 +238,28 @@ Four findings from the Part 1–5 build-out worth flagging for future work:
 
 ### Training results
 
-- 20 RF classifiers (one per destroy-repair pair), `class_weight='balanced'`, 100 trees
-- Per-log-file train/test split (23 train / 8 test logs) to prevent within-trajectory leakage
-- Median F1 lift over always-1 baseline: +0.086 on non-degenerate pairs
-- 11/14 non-degenerate pairs have positive lift (>0.01)
-- Best pair: `rtcritical+slack` with +0.36 F1 lift
+20 RF classifiers (one per destroy-repair pair), `class_weight='balanced'`, 100 trees, per-log-file train/test split (23 train / 8 test logs, `random_state=42`) to prevent within-trajectory leakage.
+
+**Run metadata** (apply to all numbers below): features parquet `cache_v2_dynamic/features.parquet` extracted from all 31 trail_logs/ files (manhattan 30s/01_min/02_min/05_min × 3 delays × ≤3 seeds), labels via `improvement_freq` rule with `threshold=0.3`, epoch-1 filtered. **Going forward, every metric reported in this file should carry a one-line run-metadata reference (parquet path + log set + date) so we can reproduce the number months later.**
+
+Three candidates trained from the same `cache_v2_dynamic` data via [train_candidates.py](ml_train/train_candidates.py):
+
+| candidate | batches | #features | median F1 lift (non-degenerate) |
+|-----------|---------|-----------|---------------------------------|
+| `5f`  | `core` | 5 | +0.034 |
+| `13f` | `core,tightness,worst_support` | 13 | **+0.053** |
+| `20f` | all 5 batches | 20 | +0.029–+0.047 (RF parallel-scheduling variance) |
+
+The 13-feature configuration is the offline-F1 peak. Adding `lns_state` + `rolling_horizon` (the 20f config) is roughly tied with 13f within RandomForest `n_jobs=-1` non-determinism; the online benchmark is the deciding test.
+
+Top feature importances on the 20f model: `cost_contribution_std` (10.3%), `route_slack_std` (9.0%), `ride_time_utilization_avg` (8.8%) — all from the `tightness` and `worst_support` batches that target our novel operators. The four Bongiovanni-adapted `lns_state` features rank in the middle band (#4-#16). The Bongiovanni-adapted `horizon_elapsed_frac` carries genuine signal (importance 2.8%) but ranks low on this dataset.
+
+**Note on the legacy "+0.086" headline**: an earlier run reported +0.086 median lift on 5 features. That number is not reproducible — it was extracted from a parquet that no longer exists, on an unknown log subset. The current reproducible 5-feature reference is +0.034. Don't chase the old number.
+
+### Pair-level dynamics worth noting
+
+- The `worst_support` batch flips `pair_1_3` (worst+slack) from −0.33 to +0.50 lift while pulling `pair_3_3` (rtcritical+slack) from +0.15 to −0.21. The cost-dispersion features support `worst_destroy` precisely while shifting RF split capacity away from `rtcritical`'s decision boundary on the test set's outlier log (`manhattan_05_min_delay03_min_s42`, 100% positive rate for pair_3_3 vs ~0.4% on the other 7 test logs).
+- The pair_3_3 collapse is a data-split artifact + RF conservatism interaction, not a feature problem (precision stays at 1.0; recall drops). Stratified train/test splitting and/or `max_features` tuning are open methodology tasks; the online benchmark may not reflect this offline-metric quirk.
 
 ### ONNX export
 
@@ -295,7 +312,11 @@ NO changes needed to: MLSelector, CMake, operator_registry, manifest parser, par
 
 ### Interpretation
 
-With 5 basic features, ML-guided selection doesn't yet outperform roulette. The infrastructure is fully working (ONNX integration, subset support, feature parity, manifest-driven versioning). The bottleneck is **feature richness** — Bongiovanni et al. use 46 features. Adding more features (demand spatial distribution, vehicle states, routing solution characteristics, LNS iteration statistics) is the clear next step to establish ML superiority.
+The benchmark above was run on the **5-feature** ML model (the only model that existed at the time). With 5 features, ML-guided selection is statistically tied with roulette.
+
+The 21-feature pipeline was subsequently built (since reduced to 20 after dropping `flexibility_horizon` for structural degeneracy on Manhattan logs). Three new candidate models exist (`models_v2_dyn_5f`, `_13f`, `_20f`) but **the benchmark has not yet been re-run on them** — that is the immediate next step. Offline F1 lift suggests the 13-feature model (core+tightness+worst_support) is the strongest candidate; the online benchmark is the deciding test.
+
+The 81-run table above is preserved as the reproducible 5-feature baseline. Replace it with the 5f-vs-13f-vs-20f comparison once the benchmark completes.
 
 ---
 
@@ -353,7 +374,7 @@ ML models were trained on ≤05min data. Running ML on 15min/30min is extrapolat
 
 ## What's Next
 
-1. **Retrain + benchmark on the 21-feature pipeline** — feature expansion is done (5 batches × 21 features, parity-verified end-to-end across 6 scenarios). Re-run extract-features → compute-labels → train → export-onnx with `--mode dynamic --batches core,tightness,worst_support,lns_state,rolling_horizon`, then re-run the 81-run benchmark matrix. Compare against the 5-feature baseline reported above.
+1. **Benchmark the three candidate models** — three ONNX bundles already exist (`models_v2_dyn_{5f,13f,20f}/onnx/`), each from `cache_v2_dynamic` (20-feature parquet, 31 trail logs, `random_state=42`). Run the benchmark harness with `--ml-model-dir` pointing at each in turn, plus `random` and `roulette` controls; report per-instance means and paired comparisons. Offline F1 lift puts the 13f model on top (+0.053 median lift); the online benchmark is the deciding test.
 2. **Static-vs-dynamic ablation** — generate static training logs (no current dataset), train a static model with `--mode static --batches core,tightness,worst_support,lns_state` (17 features, no rolling_horizon), benchmark on dynamic instances. The synthetic fixture B already validates the static-mode code path end-to-end; the missing piece is real static logs.
 3. **Budget/config ablation** — run the full factorial (`--budgets 1000,5000,15000 --configs classical,full,novel-focused`) to understand interaction effects.
 4. **Larger instances** — generate training data from 05min instances, retrain, test on 15min.

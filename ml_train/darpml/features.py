@@ -13,7 +13,7 @@ Each feature carries three pieces of metadata, declared at registration:
 Adding a feature requires the same metadata in C++ via REGISTER_FEATURE_V2 in
 cpp/src/ml/feature_extractor.cpp.
 
-21 features across 5 batches:
+20 features across 5 batches:
 
   feature                          batch            mode       tol     source
   -------------------------------- ---------------- ---------- ------- ----------
@@ -37,7 +37,8 @@ cpp/src/ml/feature_extractor.cpp.
   unassigned_count                 lns_state        both       0.0     novel
   committed_travel_time_frac       rolling_horizon  dynamic    0.0     novel
   horizon_elapsed_frac             rolling_horizon  dynamic    0.0     Bongiovanni #2
-  flexibility_horizon              rolling_horizon  dynamic    0.0     novel
+
+(`flexibility_horizon` was removed after diagnostic — see THESIS_NOTES.md.)
 
 Bongiovanni numbering follows their 2022 paper's 46-feature catalogue. `mode`
 semantics: features tagged `dynamic` are stripped from static-mode model
@@ -582,16 +583,12 @@ def _unassigned_count(state: SolverState, instance: DARPInstance,
 
 
 # ---------------------------------------------------------------------------
-# Batch: rolling_horizon (3 features, dynamic-only). Surfaces dynamic-DARP
+# Batch: rolling_horizon (2 features, dynamic-only). Surfaces dynamic-DARP
 # state that the static-mode model can't observe — the basis for the
-# static-vs-dynamic ML ablation in the thesis.
+# static-vs-dynamic ML ablation in the thesis. Originally 3 features;
+# `flexibility_horizon` was removed after diagnostic showed it was
+# structurally degenerate on Manhattan logs (see end of file).
 # ---------------------------------------------------------------------------
-
-# First-pass tuning constant for flexibility_horizon. epoch_length * 10 gives
-# ~5min of horizon at the standard 30s epoch — enough to span the typical
-# pickup-window slack. May need retuning after first training results if the
-# distribution turns out to be all-near-0 or all-saturated.
-HORIZON_CONSTANT_MULT = 10
 
 
 @register_feature("committed_travel_time_frac",
@@ -657,28 +654,11 @@ def _horizon_elapsed_frac(state: SolverState, instance: DARPInstance,
     return raw
 
 
-@register_feature("flexibility_horizon",
-                  batch="rolling_horizon", mode="dynamic", tolerance=0.0)
-def _flexibility_horizon(state: SolverState, instance: DARPInstance,
-                            header: LogHeader) -> float:
-    """Mean over active requests of (pickup_tw_start - sim_clock) / HORIZON_CONSTANT.
-
-    Negative values (pickup window already opened) clip to 0.0 — the feature
-    represents *remaining* horizon, so already-opened windows contribute zero.
-    HORIZON_CONSTANT = epoch_length * HORIZON_CONSTANT_MULT (10 by default);
-    a first-pass choice that may need retuning after first training results
-    if the distribution is pathological.
-    """
-    horizon_constant = header.epoch_length * HORIZON_CONSTANT_MULT
-    if horizon_constant == 0.0:
-        return 0.0
-    pickups = _get_active_pickups(state, instance.num_requests)
-    if not pickups:
-        return 0.0
-    total = 0.0
-    for nid in pickups:
-        raw = float(instance.nodes[nid].earliest) - state.sim_clock
-        if raw < 0.0:
-            raw = 0.0
-        total += raw / horizon_constant
-    return total / len(pickups)
+# flexibility_horizon was removed after the first 21-feature training run.
+# Diagnostic on cache_v2_dynamic showed it was structurally degenerate:
+# constant 0 across all 13,762 sampled rows because Manhattan dynamic logs
+# only fire epochs (MIN_REQUESTS_FOR_EPOCH gating) AFTER all active pickups'
+# time windows have already opened. Documented under "Resolved methodology
+# findings" in THESIS_NOTES.md. A reformulation (e.g. (latest - sim_clock) /
+# HORIZON for time-to-window-CLOSE, or scheduler-derived slack-until-pickup)
+# is left as future work; it would join a second batch.

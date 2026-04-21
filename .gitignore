@@ -17,3 +17,20 @@ results
 results2
 results_li_lim
 scripts/compare_feasibility.py
+
+# ML training pipeline artifacts
+ml_train/cache/
+ml_train/models/
+ml_train/validation/
+
+# Benchmark artifacts
+bench_results/
+benchmarks/__pycache__/
+
+*.jsonl
+*.joblib
+*.onnx
+*.json
+*.parquet
+*.csv
+*.log
