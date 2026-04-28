@@ -303,6 +303,10 @@ int main(int argc, char* argv[]) {
         std::cout << "Unassigned:      " << result.best.unassigned.size() << "\n";
         std::cout << "Construction:    " << result.construction_time << "s\n";
         std::cout << "Solve time:      " << result.solve_time << "s\n";
+        std::cout << "Total iterations:  " << result.iterations_completed << "\n"
+                  << "  improving:       " << result.iters_improving << "\n"
+                  << "  new global best: " << result.iters_new_best << "\n"
+                  << "  SA-accepted:     " << result.iters_sa_accepted << "\n";
 
         // Feasibility check
         auto [feasible, reason] = result.best.is_feasible();

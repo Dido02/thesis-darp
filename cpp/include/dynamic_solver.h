@@ -27,6 +27,9 @@ struct EpochLog {
     int requests_pending;
     int requests_rejected;
     int alns_iterations;
+    int iters_improving = 0;     // delta < -EPS within the epoch
+    int iters_new_best = 0;      // new global best within the epoch (subset of iters_improving)
+    int iters_sa_accepted = 0;   // SA-accepted worsening within the epoch
     double obj_before;   // objective at start of epoch (before ALNS)
     double obj_after;    // objective at end of epoch (after ALNS)
     double wall_clock_ms;

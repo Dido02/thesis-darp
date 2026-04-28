@@ -12,6 +12,9 @@ struct SolverResult {
     double construction_time;
     double solve_time;
     int iterations_completed = 0;
+    int iters_improving = 0;     // delta < -EPS (strict improvement over current)
+    int iters_new_best = 0;      // candidate set a new global best (subset of iters_improving)
+    int iters_sa_accepted = 0;   // delta >= -EPS but accepted by SA exp roll
     double total_destroy_time = 0.0;
     double total_repair_time = 0.0;
     double total_other_time = 0.0;

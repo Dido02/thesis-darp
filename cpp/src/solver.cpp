@@ -396,6 +396,9 @@ SolverResult solve(
                                         // exclude_selection_from_budget is set.
 
     int final_iter = 0;
+    int iters_improving = 0;
+    int iters_new_best = 0;
+    int iters_sa_accepted = 0;
     for (int iter = 0; iter < max_iterations; iter++) {
         final_iter = iter + 1;
 
@@ -488,10 +491,12 @@ SolverResult solve(
         bool accept = false;
         if (delta < -EPS) {
             accept = true;
+            iters_improving++;
         } else {
             std::uniform_real_distribution<double> u(0.0, 1.0);
             if (u(rng) < std::exp(-delta / temperature)) {
                 accept = true;
+                iters_sa_accepted++;
             }
         }
 
@@ -515,6 +520,7 @@ SolverResult solve(
             best_obj = current_obj;
             destroy_improve[d_idx]++;
             repair_improve[r_idx]++;
+            iters_new_best++;
         }
 
         registry.update_weights(d_idx, r_idx, score);
@@ -615,6 +621,9 @@ SolverResult solve(
         solve_time,
         final_iter
     };
+    result.iters_improving = iters_improving;
+    result.iters_new_best = iters_new_best;
+    result.iters_sa_accepted = iters_sa_accepted;
     result.total_destroy_time = total_destroy_time;
     result.total_repair_time = total_repair_time;
     result.total_other_time = total_other_time;
@@ -682,6 +691,9 @@ SolverResult solve_warm(
     auto solve_t0 = Clock::now();
     bool sa_calibrated = false;
     int final_iter = 0;
+    int iters_improving = 0;
+    int iters_new_best = 0;
+    int iters_sa_accepted = 0;
     double w_total_destroy_time = 0.0;
     double w_total_repair_time = 0.0;
 
@@ -773,9 +785,13 @@ SolverResult solve_warm(
         bool accept = false;
         if (delta < -1e-6) {
             accept = true;
+            iters_improving++;
         } else {
             std::uniform_real_distribution<double> u(0.0, 1.0);
-            if (u(rng) < std::exp(-delta / temperature)) accept = true;
+            if (u(rng) < std::exp(-delta / temperature)) {
+                accept = true;
+                iters_sa_accepted++;
+            }
         }
 
         double score = 0.0;
@@ -790,6 +806,7 @@ SolverResult solve_warm(
         if (current_obj < best_obj - 1e-6) {
             best = current.copy();
             best_obj = current_obj;
+            iters_new_best++;
         }
 
         registry.update_weights(d_idx, r_idx, score);
@@ -844,11 +861,14 @@ SolverResult solve_warm(
         std::move(init_sol),
         0.0,  // no construction time for warm start
         solve_time,
-        final_iter,
-        w_total_destroy_time,
-        w_total_repair_time,
-        solve_time - w_total_destroy_time - w_total_repair_time
+        final_iter
     };
+    result.iters_improving = iters_improving;
+    result.iters_new_best = iters_new_best;
+    result.iters_sa_accepted = iters_sa_accepted;
+    result.total_destroy_time = w_total_destroy_time;
+    result.total_repair_time = w_total_repair_time;
+    result.total_other_time = solve_time - w_total_destroy_time - w_total_repair_time;
     result.total_selection_time = total_selection_time;
     return result;
 }

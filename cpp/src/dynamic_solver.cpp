@@ -422,6 +422,9 @@ EpochLog DynamicSolver::run_epoch_alns(int epoch_id) {
     log.requests_pending = static_cast<int>(pending_.size());
     log.requests_rejected = static_cast<int>(rejected_.size());
     log.alns_iterations = result.iterations_completed;
+    log.iters_improving = result.iters_improving;
+    log.iters_new_best = result.iters_new_best;
+    log.iters_sa_accepted = result.iters_sa_accepted;
     log.obj_before = obj_before;
     log.obj_after = current_solution_.travel_cost();
     log.wall_clock_ms = wall_ms;
@@ -528,6 +531,9 @@ DynamicResult DynamicSolver::run() {
                           << " pending=" << log.requests_pending
                           << " rejected=" << log.requests_rejected
                           << "\n | iters=" << log.alns_iterations
+                          << " (improve=" << log.iters_improving
+                          << " best=" << log.iters_new_best
+                          << " sa=" << log.iters_sa_accepted << ")"
                           << " obj=" << log.obj_before << "->" << log.obj_after
                           << " (" << (log.obj_before > 1e-6 ? -100.0*(log.obj_after - log.obj_before)/log.obj_before : 0.0) << "%)"
                           << " | destroy=" << static_cast<int>(log.destroy_time_ms)
@@ -630,6 +636,17 @@ DynamicResult DynamicSolver::run() {
     double service_rate = (instance_.num_requests > 0)
         ? 100.0 * total_served / instance_.num_requests : 0.0;
 
+    long long total_iters = 0;
+    long long total_iters_improving = 0;
+    long long total_iters_new_best = 0;
+    long long total_iters_sa_accepted = 0;
+    for (const auto& el : epoch_logs) {
+        total_iters += el.alns_iterations;
+        total_iters_improving += el.iters_improving;
+        total_iters_new_best += el.iters_new_best;
+        total_iters_sa_accepted += el.iters_sa_accepted;
+    }
+
     if (verbose_) {
         std::cout << "\n=== Dynamic DARP Summary ===\n"
                   << "Total requests:  " << instance_.num_requests << "\n"
@@ -638,7 +655,11 @@ DynamicResult DynamicSolver::run() {
                   << "Rejected:        " << total_rejected << "\n"
                   << "Total travel:    " << total_travel << "\n"
                   << "Epochs:          " << epoch_id << "\n"
-                  << "Wall-clock:      " << total_wall << "s\n";
+                  << "Wall-clock:      " << total_wall << "s\n"
+                  << "Total ALNS iterations:  " << total_iters << "\n"
+                  << "  improving:            " << total_iters_improving << "\n"
+                  << "  new global best:      " << total_iters_new_best << "\n"
+                  << "  SA-accepted worse:    " << total_iters_sa_accepted << "\n";
     }
 
     return DynamicResult{
