@@ -237,12 +237,14 @@ static void attach_ml_selector_if_needed(
     OperatorRegistry& registry,
     const std::string& selection_config,
     const std::string& ml_model_dir,
-    bool verbose) {
+    bool verbose,
+    const std::string& log_ml_probs_path = "") {
 
     if (selection_config != "ml") return;
 
 #ifndef DARP_ENABLE_ML
     (void)registry; (void)ml_model_dir; (void)verbose;
+    (void)log_ml_probs_path;
     throw std::runtime_error(
         "--selection ml: this binary was built without ML support. "
         "Rebuild with -DENABLE_ML_SELECTION=ON.");
@@ -266,7 +268,8 @@ static void attach_ml_selector_if_needed(
     }
 
     auto ml = std::make_unique<MLSelector>(
-        ml_model_dir, active_destroy, active_repair, d_to_idx, r_to_idx);
+        ml_model_dir, active_destroy, active_repair, d_to_idx, r_to_idx,
+        log_ml_probs_path);
 
     if (verbose) {
         std::cout << "ML selector loaded: model_version=" << ml->model_version()
@@ -296,7 +299,8 @@ SolverResult solve(
     const std::string& init_sort,
     ALNSLogger* logger,
     const std::string& ml_model_dir,
-    bool exclude_selection_from_budget) {
+    bool exclude_selection_from_budget,
+    const std::string& log_ml_probs_path) {
 
     using Clock = std::chrono::high_resolution_clock;
 
@@ -304,7 +308,8 @@ SolverResult solve(
 
     // Build operator registry
     OperatorRegistry registry = build_registry(destroy_config, repair_config, selection_config);
-    attach_ml_selector_if_needed(registry, selection_config, ml_model_dir, verbose);
+    attach_ml_selector_if_needed(registry, selection_config, ml_model_dir, verbose,
+                                 log_ml_probs_path);
 
     if (verbose) {
         std::cout << "Operators: destroy=[";
@@ -652,14 +657,16 @@ SolverResult solve_warm(
     const std::string& ml_model_dir,
     double sim_clock,
     double epoch_length,
-    bool exclude_selection_from_budget) {
+    bool exclude_selection_from_budget,
+    const std::string& log_ml_probs_path) {
 
     using Clock = std::chrono::high_resolution_clock;
 
     std::mt19937 rng(seed);
 
     OperatorRegistry registry = build_registry(destroy_config, repair_config, selection_config);
-    attach_ml_selector_if_needed(registry, selection_config, ml_model_dir, verbose);
+    attach_ml_selector_if_needed(registry, selection_config, ml_model_dir, verbose,
+                                 log_ml_probs_path);
 
     DARPSolution init_sol = initial_solution.copy();
     init_sol.feasibility_mode = feasibility_mode;

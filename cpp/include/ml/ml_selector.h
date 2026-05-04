@@ -5,6 +5,7 @@
 #include "ml/manifest.h"
 #include "solution.h"
 
+#include <fstream>
 #include <map>
 #include <memory>
 #include <random>
@@ -35,7 +36,8 @@ public:
         const std::vector<std::string>& active_destroy,
         const std::vector<std::string>& active_repair,
         const std::map<std::string, int>& registry_destroy_index,
-        const std::map<std::string, int>& registry_repair_index);
+        const std::map<std::string, int>& registry_repair_index,
+        const std::string& prob_log_path = "");
 
     ~MLSelector();
 
@@ -66,4 +68,11 @@ private:
     // Ort env is owned here so sessions can reference it.
     std::unique_ptr<Ort::Env> env_;
     std::unique_ptr<Ort::MemoryInfo> memory_info_;
+
+    // Optional per-iteration probability logging. When prob_log_path is non-empty,
+    // we open a JSONL file in the ctor and write one record per select_pair() call.
+    // call_idx_ is a cumulative counter across epochs (st.iter resets per epoch
+    // because solve_warm() is called fresh each epoch).
+    std::ofstream prob_log_;
+    long long call_idx_ = 0;
 };

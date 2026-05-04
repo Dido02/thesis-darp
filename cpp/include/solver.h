@@ -38,7 +38,8 @@ SolverResult solve(
     const std::string& init_sort = "slack",
     ALNSLogger* logger = nullptr,
     const std::string& ml_model_dir = "",
-    bool exclude_selection_from_budget = false);
+    bool exclude_selection_from_budget = false,
+    const std::string& log_ml_probs_path = "");
 
 // Warm-start ALNS: skip initial solution construction, use provided solution.
 // sim_clock and epoch_length are passed through to ALNSState so rolling_horizon
@@ -61,4 +62,5 @@ SolverResult solve_warm(
     const std::string& ml_model_dir = "",
     double sim_clock = 0.0,
     double epoch_length = 0.0,
-    bool exclude_selection_from_budget = false);
+    bool exclude_selection_from_budget = false,
+    const std::string& log_ml_probs_path = "");

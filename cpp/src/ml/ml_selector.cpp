@@ -20,7 +20,8 @@ MLSelector::MLSelector(
     const std::vector<std::string>& active_destroy,
     const std::vector<std::string>& active_repair,
     const std::map<std::string, int>& registry_destroy_index,
-    const std::map<std::string, int>& registry_repair_index) {
+    const std::map<std::string, int>& registry_repair_index,
+    const std::string& prob_log_path) {
 
     fs::path root(model_dir);
     manifest_ = load_manifest((root / "feature_manifest.json").string());
@@ -106,6 +107,28 @@ MLSelector::MLSelector(
 
     // Stable iteration order for sampling.
     for (const auto& [key, _] : sessions_) pair_order_.push_back(key);
+
+    // Optional probability log: open file + write one header line listing
+    // every active (destroy, repair) pair so the plot script can label columns.
+    // Append mode because solve_warm() (and therefore this ctor) is called
+    // fresh per epoch in dynamic mode — we want to accumulate records across
+    // epochs into a single file. The header gets re-emitted each epoch (same
+    // pair_order); the plot script dedupes.
+    if (!prob_log_path.empty()) {
+        prob_log_.open(prob_log_path, std::ios::app);
+        if (!prob_log_) {
+            throw std::runtime_error(
+                "Failed to open --log-ml-probs file: " + prob_log_path);
+        }
+        prob_log_ << "{\"type\":\"header\",\"n_pairs\":" << pair_order_.size()
+                  << ",\"pair_order\":[";
+        for (size_t i = 0; i < pair_order_.size(); ++i) {
+            if (i) prob_log_ << ",";
+            prob_log_ << "[\"" << pair_order_[i].first << "\",\""
+                      << pair_order_[i].second << "\"]";
+        }
+        prob_log_ << "]}\n";
+    }
 }
 
 MLSelector::~MLSelector() = default;
@@ -194,6 +217,21 @@ std::pair<int, int> MLSelector::select_pair(
     for (const auto& key : pair_order_) {
         auto& session = *sessions_.at(key);
         p_good.push_back(run_session_p_class1(session, *memory_info_, input));
+    }
+
+    // Optional: log raw probabilities for offline visualization. call_idx_
+    // is cumulative across epochs (solve_warm restarts st.iter to 0 each epoch).
+    if (prob_log_.is_open()) {
+        prob_log_ << "{\"call_idx\":" << call_idx_
+                  << ",\"epoch_iter\":" << st.iter
+                  << ",\"sim_clock\":" << st.sim_clock
+                  << ",\"probs\":[";
+        for (size_t i = 0; i < p_good.size(); ++i) {
+            if (i) prob_log_ << ",";
+            prob_log_ << p_good[i];
+        }
+        prob_log_ << "]}\n";
+        ++call_idx_;
     }
 
     // 3. Sample.

@@ -23,6 +23,9 @@ static void print_usage(const char* prog) {
               << "  --repair OPS         Comma-separated repair operators\n"
               << "  --selection METHOD   Operator selection: random, roulette, ml (default: roulette)\n"
               << "  --ml-model-dir DIR   Directory with feature_manifest.json + .onnx files (required for --selection ml)\n"
+              << "  --log-ml-probs FILE  When --selection ml, write a JSONL of per-iteration\n"
+              << "                       (call_idx, epoch_iter, sim_clock, probs) to FILE.\n"
+              << "                       Append-mode; suitable for plot_ml_probabilities.py.\n"
               << "  --sa-start TEMP      SA start temperature (default: 100)\n"
               << "  --sa-end TEMP        SA end temperature (default: 0.01)\n"
               << "  --time-limit SECS    Stop after this many seconds (default: 0 = use iterations)\n"
@@ -89,6 +92,7 @@ int main(int argc, char* argv[]) {
     std::string init_sort = "slack";
     std::string output_routes_path;
     std::string ml_model_dir;
+    std::string log_ml_probs_path;
 
     // Dynamic mode options
     bool dynamic_mode = false;
@@ -129,6 +133,8 @@ int main(int argc, char* argv[]) {
             selection_config = argv[++i];
         } else if (arg == "--ml-model-dir" && i + 1 < argc) {
             ml_model_dir = argv[++i];
+        } else if (arg == "--log-ml-probs" && i + 1 < argc) {
+            log_ml_probs_path = argv[++i];
         } else if (arg == "--sa-start" && i + 1 < argc) {
             sa_start = std::stod(argv[++i]);
         } else if (arg == "--sa-end" && i + 1 < argc) {
@@ -280,6 +286,7 @@ int main(int argc, char* argv[]) {
         sp.exclude_selection_from_budget = exclude_selection_from_budget;
         sp.logger = logger;
         sp.ml_model_dir = ml_model_dir;
+        sp.log_ml_probs_path = log_ml_probs_path;
 
         DynamicSolver dynamic_solver(inst, ec, sp, true);
         DynamicResult result = dynamic_solver.run();
@@ -296,7 +303,8 @@ int main(int argc, char* argv[]) {
                                     feasibility_mode, destroy_config, repair_config,
                                     selection_config, time_limit, penalty, init_sort,
                                     logger, ml_model_dir,
-                                    exclude_selection_from_budget);
+                                    exclude_selection_from_budget,
+                                    log_ml_probs_path);
 
         std::cout << "\nFinal objective: " << result.best.objective() << "\n";
         std::cout << "Travel cost:     " << result.best.travel_cost() << "\n";

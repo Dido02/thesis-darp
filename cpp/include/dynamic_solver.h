@@ -74,6 +74,8 @@ struct SolverParams {
                                                   // selection strategy.
     ALNSLogger* logger = nullptr;  // non-owning, nullable
     std::string ml_model_dir;  // empty = no ML; required when selection_config == "ml"
+    std::string log_ml_probs_path;  // empty = no logging; if set, MLSelector writes
+                                    // per-iteration probability JSONL to this path.
 };
 
 class DynamicSolver {
