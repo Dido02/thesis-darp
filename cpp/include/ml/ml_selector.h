@@ -83,4 +83,9 @@ private:
     // T<1 sharpens contrast; T>1 flattens; default (nullopt) keeps the existing
     // proportional sampler so bench results without the flag are byte-identical.
     std::optional<float> softmax_temp_;
+
+    // Reusable scratch buffer for softmax weights. Sized once in the ctor so
+    // select_pair() avoids per-call heap allocation (which polluted caches and
+    // ate ~2-4% of iterations even under --exclude-selection-from-budget).
+    std::vector<double> softmax_weights_;
 };

@@ -111,6 +111,10 @@ MLSelector::MLSelector(
     // Stable iteration order for sampling.
     for (const auto& [key, _] : sessions_) pair_order_.push_back(key);
 
+    // Pre-size scratch buffer for softmax weights — avoids per-call heap
+    // allocation inside select_pair when softmax_temp_ is set.
+    softmax_weights_.resize(pair_order_.size());
+
     // Optional probability log: open file + write one header line listing
     // every active (destroy, repair) pair so the plot script can label columns.
     // Append mode because solve_warm() (and therefore this ctor) is called
@@ -233,19 +237,20 @@ std::pair<int, int> MLSelector::select_pair(
         // Subtracting max_p stabilises against overflow (the resulting
         // distribution is unchanged because the subtraction cancels in the
         // ratio). T<1 sharpens contrast; T>1 flattens.
+        // Reuses softmax_weights_ scratch buffer (pre-sized in ctor) to
+        // avoid per-call heap allocation.
         const float T = *softmax_temp_;
         const float max_p = *std::max_element(p_good.begin(), p_good.end());
-        std::vector<double> weights(p_good.size());
         double sum = 0.0;
         for (size_t i = 0; i < p_good.size(); ++i) {
-            weights[i] = std::exp(static_cast<double>(p_good[i] - max_p) / T);
-            sum += weights[i];
+            softmax_weights_[i] = std::exp(static_cast<double>(p_good[i] - max_p) / T);
+            sum += softmax_weights_[i];
         }
         double r = std::uniform_real_distribution<double>(0.0, sum)(rng);
         double cum = 0.0;
-        chosen = weights.size() - 1;
-        for (size_t k = 0; k < weights.size(); ++k) {
-            cum += weights[k];
+        chosen = softmax_weights_.size() - 1;
+        for (size_t k = 0; k < softmax_weights_.size(); ++k) {
+            cum += softmax_weights_[k];
             if (r <= cum) { chosen = k; break; }
         }
     } else {
