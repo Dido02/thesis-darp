@@ -8,6 +8,7 @@
 #include <fstream>
 #include <map>
 #include <memory>
+#include <optional>
 #include <random>
 #include <string>
 #include <utility>
@@ -37,7 +38,8 @@ public:
         const std::vector<std::string>& active_repair,
         const std::map<std::string, int>& registry_destroy_index,
         const std::map<std::string, int>& registry_repair_index,
-        const std::string& prob_log_path = "");
+        const std::string& prob_log_path = "",
+        std::optional<float> softmax_temp = std::nullopt);
 
     ~MLSelector();
 
@@ -75,4 +77,10 @@ private:
     // because solve_warm() is called fresh each epoch).
     std::ofstream prob_log_;
     long long call_idx_ = 0;
+
+    // Optional softmax-with-temperature picker. When set, replaces the default
+    // proportional sampler in select_pair(): weights = exp((p - max_p) / T).
+    // T<1 sharpens contrast; T>1 flattens; default (nullopt) keeps the existing
+    // proportional sampler so bench results without the flag are byte-identical.
+    std::optional<float> softmax_temp_;
 };

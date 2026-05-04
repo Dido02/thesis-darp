@@ -238,13 +238,14 @@ static void attach_ml_selector_if_needed(
     const std::string& selection_config,
     const std::string& ml_model_dir,
     bool verbose,
-    const std::string& log_ml_probs_path = "") {
+    const std::string& log_ml_probs_path = "",
+    std::optional<float> softmax_temp = std::nullopt) {
 
     if (selection_config != "ml") return;
 
 #ifndef DARP_ENABLE_ML
     (void)registry; (void)ml_model_dir; (void)verbose;
-    (void)log_ml_probs_path;
+    (void)log_ml_probs_path; (void)softmax_temp;
     throw std::runtime_error(
         "--selection ml: this binary was built without ML support. "
         "Rebuild with -DENABLE_ML_SELECTION=ON.");
@@ -269,7 +270,7 @@ static void attach_ml_selector_if_needed(
 
     auto ml = std::make_unique<MLSelector>(
         ml_model_dir, active_destroy, active_repair, d_to_idx, r_to_idx,
-        log_ml_probs_path);
+        log_ml_probs_path, softmax_temp);
 
     if (verbose) {
         std::cout << "ML selector loaded: model_version=" << ml->model_version()
@@ -300,7 +301,8 @@ SolverResult solve(
     ALNSLogger* logger,
     const std::string& ml_model_dir,
     bool exclude_selection_from_budget,
-    const std::string& log_ml_probs_path) {
+    const std::string& log_ml_probs_path,
+    std::optional<float> ml_softmax_temp) {
 
     using Clock = std::chrono::high_resolution_clock;
 
@@ -309,7 +311,7 @@ SolverResult solve(
     // Build operator registry
     OperatorRegistry registry = build_registry(destroy_config, repair_config, selection_config);
     attach_ml_selector_if_needed(registry, selection_config, ml_model_dir, verbose,
-                                 log_ml_probs_path);
+                                 log_ml_probs_path, ml_softmax_temp);
 
     if (verbose) {
         std::cout << "Operators: destroy=[";
@@ -658,7 +660,8 @@ SolverResult solve_warm(
     double sim_clock,
     double epoch_length,
     bool exclude_selection_from_budget,
-    const std::string& log_ml_probs_path) {
+    const std::string& log_ml_probs_path,
+    std::optional<float> ml_softmax_temp) {
 
     using Clock = std::chrono::high_resolution_clock;
 
@@ -666,7 +669,7 @@ SolverResult solve_warm(
 
     OperatorRegistry registry = build_registry(destroy_config, repair_config, selection_config);
     attach_ml_selector_if_needed(registry, selection_config, ml_model_dir, verbose,
-                                 log_ml_probs_path);
+                                 log_ml_probs_path, ml_softmax_temp);
 
     DARPSolution init_sol = initial_solution.copy();
     init_sol.feasibility_mode = feasibility_mode;

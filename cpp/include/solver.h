@@ -2,6 +2,7 @@
 
 #include "instance.h"
 #include "solution.h"
+#include <optional>
 #include <string>
 
 class ALNSLogger;  // forward declaration
@@ -39,7 +40,8 @@ SolverResult solve(
     ALNSLogger* logger = nullptr,
     const std::string& ml_model_dir = "",
     bool exclude_selection_from_budget = false,
-    const std::string& log_ml_probs_path = "");
+    const std::string& log_ml_probs_path = "",
+    std::optional<float> ml_softmax_temp = std::nullopt);
 
 // Warm-start ALNS: skip initial solution construction, use provided solution.
 // sim_clock and epoch_length are passed through to ALNSState so rolling_horizon
@@ -63,4 +65,5 @@ SolverResult solve_warm(
     double sim_clock = 0.0,
     double epoch_length = 0.0,
     bool exclude_selection_from_budget = false,
-    const std::string& log_ml_probs_path = "");
+    const std::string& log_ml_probs_path = "",
+    std::optional<float> ml_softmax_temp = std::nullopt);

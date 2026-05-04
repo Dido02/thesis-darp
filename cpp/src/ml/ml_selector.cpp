@@ -21,7 +21,10 @@ MLSelector::MLSelector(
     const std::vector<std::string>& active_repair,
     const std::map<std::string, int>& registry_destroy_index,
     const std::map<std::string, int>& registry_repair_index,
-    const std::string& prob_log_path) {
+    const std::string& prob_log_path,
+    std::optional<float> softmax_temp) {
+
+    softmax_temp_ = softmax_temp;
 
     fs::path root(model_dir);
     manifest_ = load_manifest((root / "feature_manifest.json").string());
@@ -219,8 +222,58 @@ std::pair<int, int> MLSelector::select_pair(
         p_good.push_back(run_session_p_class1(session, *memory_info_, input));
     }
 
-    // Optional: log raw probabilities for offline visualization. call_idx_
-    // is cumulative across epochs (solve_warm restarts st.iter to 0 each epoch).
+    // 3. Sample. Two paths: (a) softmax-with-temperature when softmax_temp_ is
+    //    set; (b) the existing proportional sampler when not. The default path
+    //    (softmax_temp_ unset) is byte-identical to prior versions: same
+    //    constants, same loop order, same RNG draw count.
+    size_t chosen;
+
+    if (softmax_temp_.has_value()) {
+        // Softmax: weights[k] = exp((p_good[k] - max_p) / T).
+        // Subtracting max_p stabilises against overflow (the resulting
+        // distribution is unchanged because the subtraction cancels in the
+        // ratio). T<1 sharpens contrast; T>1 flattens.
+        const float T = *softmax_temp_;
+        const float max_p = *std::max_element(p_good.begin(), p_good.end());
+        std::vector<double> weights(p_good.size());
+        double sum = 0.0;
+        for (size_t i = 0; i < p_good.size(); ++i) {
+            weights[i] = std::exp(static_cast<double>(p_good[i] - max_p) / T);
+            sum += weights[i];
+        }
+        double r = std::uniform_real_distribution<double>(0.0, sum)(rng);
+        double cum = 0.0;
+        chosen = weights.size() - 1;
+        for (size_t k = 0; k < weights.size(); ++k) {
+            cum += weights[k];
+            if (r <= cum) { chosen = k; break; }
+        }
+    } else {
+        // Existing proportional sampler — verbatim from prior versions.
+        constexpr float MIN_P = 1e-6f;
+        constexpr double MIN_SUM = 0.01;
+
+        double sum = 0.0;
+        for (float p : p_good) sum += std::max(p, MIN_P);
+
+        if (sum < MIN_SUM) {
+            // Degenerate — uniform over loaded pairs.
+            chosen = std::uniform_int_distribution<size_t>(
+                0, pair_order_.size() - 1)(rng);
+        } else {
+            double r = std::uniform_real_distribution<double>(0.0, sum)(rng);
+            double cum = 0.0;
+            chosen = pair_order_.size() - 1;
+            for (size_t k = 0; k < p_good.size(); ++k) {
+                cum += std::max(p_good[k], MIN_P);
+                if (r <= cum) { chosen = k; break; }
+            }
+        }
+    }
+
+    // Optional: log probabilities + chosen index for offline visualization.
+    // Written AFTER sampling so the "picked" field is included. call_idx_ is
+    // cumulative across epochs (solve_warm restarts st.iter to 0 each epoch).
     if (prob_log_.is_open()) {
         prob_log_ << "{\"call_idx\":" << call_idx_
                   << ",\"epoch_iter\":" << st.iter
@@ -230,30 +283,8 @@ std::pair<int, int> MLSelector::select_pair(
             if (i) prob_log_ << ",";
             prob_log_ << p_good[i];
         }
-        prob_log_ << "]}\n";
+        prob_log_ << "],\"picked\":" << chosen << "}\n";
         ++call_idx_;
-    }
-
-    // 3. Sample.
-    constexpr float MIN_P = 1e-6f;
-    constexpr double MIN_SUM = 0.01;
-
-    double sum = 0.0;
-    for (float p : p_good) sum += std::max(p, MIN_P);
-
-    size_t chosen;
-    if (sum < MIN_SUM) {
-        // Degenerate — uniform over loaded pairs.
-        chosen = std::uniform_int_distribution<size_t>(
-            0, pair_order_.size() - 1)(rng);
-    } else {
-        double r = std::uniform_real_distribution<double>(0.0, sum)(rng);
-        double cum = 0.0;
-        chosen = pair_order_.size() - 1;
-        for (size_t k = 0; k < p_good.size(); ++k) {
-            cum += std::max(p_good[k], MIN_P);
-            if (r <= cum) { chosen = k; break; }
-        }
     }
 
     return pair_to_reg_idx_.at(pair_order_[chosen]);

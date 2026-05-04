@@ -3,6 +3,7 @@
 #include "instance.h"
 #include "solution.h"
 
+#include <optional>
 #include <set>
 #include <string>
 #include <vector>
@@ -76,6 +77,9 @@ struct SolverParams {
     std::string ml_model_dir;  // empty = no ML; required when selection_config == "ml"
     std::string log_ml_probs_path;  // empty = no logging; if set, MLSelector writes
                                     // per-iteration probability JSONL to this path.
+    std::optional<float> ml_softmax_temp;  // empty = default proportional sampler;
+                                           // if set, MLSelector uses softmax(p / T)
+                                           // for picking. T<1 sharpens contrast.
 };
 
 class DynamicSolver {

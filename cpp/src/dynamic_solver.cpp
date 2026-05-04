@@ -379,7 +379,8 @@ EpochLog DynamicSolver::run_epoch_alns(int epoch_id) {
         sim_clock_,                       // frozen at this epoch's trigger time
         epoch_config_.epoch_length,       // for rolling_horizon ML features
         solver_params_.exclude_selection_from_budget,
-        solver_params_.log_ml_probs_path);
+        solver_params_.log_ml_probs_path,
+        solver_params_.ml_softmax_temp);
 
     // Update current solution from ALNS result
     current_solution_ = std::move(result.best);
