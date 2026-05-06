@@ -176,6 +176,35 @@ RouteSchedule DARPSolution::compute_route_schedule(const std::vector<int>& route
     };
 }
 
+// ALAP backward sweep — see header comment.
+// latest_begin[size-1] = nodes[route[size-1]].latest
+// latest_begin[i]      = min(nodes[route[i]].latest,
+//                            latest_begin[i+1]
+//                              - service_duration[route[i]]
+//                              - travel_time[route[i] -> route[i+1]])
+std::vector<double>
+DARPSolution::compute_latest_begin_times(const std::vector<int>& route) const {
+    const auto& inst = *instance;
+    const auto& nodes = inst.nodes;
+    const auto& tt = inst.travel_time;
+    int size = static_cast<int>(route.size());
+
+    std::vector<double> latest_begin(size, 0.0);
+    if (size <= inst.empty_route_size()) {
+        return latest_begin;   // empty/depot-only route — no commits to gate
+    }
+
+    latest_begin[size - 1] = nodes[route[size - 1]].latest;
+    for (int i = size - 2; i >= 0; i--) {
+        int curr = route[i];
+        int next = route[i + 1];
+        double bound_from_succ =
+            latest_begin[i + 1] - nodes[curr].service_duration - tt[curr][next];
+        latest_begin[i] = std::min(nodes[curr].latest, bound_from_succ);
+    }
+    return latest_begin;
+}
+
 std::pair<bool, std::string> DARPSolution::check_route_feasibility(
     const std::vector<int>& route) const {
     if (feasibility_mode == "full") {

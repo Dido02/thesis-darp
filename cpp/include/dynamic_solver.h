@@ -18,6 +18,16 @@ struct EpochConfig {
     double epoch_budget_ms = 5000.0;  // wall-clock ms per ALNS epoch
 };
 
+// Commit / min-insert-position policy for the dynamic simulator.
+// Legacy (default): a pickup commits when its eager-schedule begin_service has
+//   passed sim_clock_. This is the historical behavior — keep all existing
+//   bench results reproducible.
+// Lazy: a pickup commits only when its latest-feasible begin time has passed
+//   sim_clock_. Matches the dynamic-DARP literature (Cordeau & Laporte 2003,
+//   Schilde 2011, Bongiovanni 2022). Defers commits while time-window slack
+//   remains, leaving more material for ALNS to optimize per epoch.
+enum class SchedulingPolicy { Legacy, Lazy };
+
 struct EpochLog {
     int epoch_id;
     double sim_time;
@@ -87,7 +97,8 @@ public:
     DynamicSolver(const DARPInstance& instance,
                   const EpochConfig& epoch_config,
                   const SolverParams& solver_params,
-                  bool verbose = true);
+                  bool verbose = true,
+                  SchedulingPolicy policy = SchedulingPolicy::Legacy);
 
     DynamicResult run();
 
@@ -96,6 +107,7 @@ private:
     EpochConfig epoch_config_;
     SolverParams solver_params_;
     bool verbose_;
+    SchedulingPolicy policy_;
 
     // Request pools
     std::vector<std::pair<double, int>> unreleased_;  // (release_time, request_id), sorted

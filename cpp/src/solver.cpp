@@ -345,9 +345,14 @@ SolverResult solve(
     //     init_sol.feasibility_mode = feasibility_mode;
     // }
 
-    // SA parameters — calibrated per Gschwind & Drexl (2016)
-    double sa_start_temp = 0.025 * init_sol.travel_cost();
-    double sa_end_temp = 0.065 * sa_start_temp;
+    // SA parameters — Bongiovanni-aligned, travel-based:
+    //   T_start ≈ 0.0721 * travel  ("5%-worse-than-current accepted at 50%")
+    //   T_end   = 0.001 * T_start  ("converges to zero towards end of search")
+    double ref_travel = init_sol.travel_cost();
+    double sa_start_temp = (ref_travel > 1e-6)
+        ? -0.05 * ref_travel / std::log(0.5)
+        : start_temperature;
+    double sa_end_temp = 0.001 * sa_start_temp;
 
     double temperature = sa_start_temp;
     double sa_step;
@@ -422,23 +427,39 @@ SolverResult solve(
                 break;
             }
 
-            // Calibrate cooling after warm-up iterations
-            if (!sa_calibrated && iter == 10 && elapsed > 0.0) {
-                double iters_per_sec = 10.0 / elapsed;
-                int time_based_total = static_cast<int>(iters_per_sec * time_limit);
-                int estimated_total = std::min(time_based_total, max_iterations);
-                estimated_total = std::max(estimated_total, 100);
-                sa_step = std::pow(sa_end_temp / sa_start_temp,
-                                  1.0 / estimated_total);
-                temperature = sa_start_temp;
-                sa_calibrated = true;
-                if (verbose) {
-                    std::cout << "  SA calibrated: ~" << iters_per_sec
-                              << " iter/s, estimated " << estimated_total
-                              << " total, step=" << sa_step << "\n";
+            // Bootstrap cooling at iter==10 (target T_start -> T_end), then
+            // re-target every 10 iters from T_current -> T_end over remaining
+            // time. Rolling recalibration corrects the trajectory if early
+            // iters/sec was a bad estimate of steady-state speed.
+            bool do_calibrate = false;
+            if (!sa_calibrated && iter == 10 && elapsed > 0.0) do_calibrate = true;
+            else if (sa_calibrated && iter > 10 && iter % 10 == 0 && elapsed > 0.0) do_calibrate = true;
+            if (do_calibrate) {
+                double iters_per_sec = static_cast<double>(iter) / elapsed;
+                double remaining_s = time_limit - elapsed;
+                int remaining_iters;
+                double T_from;
+                if (!sa_calibrated) {
+                    int time_based_total = static_cast<int>(iters_per_sec * time_limit);
+                    remaining_iters = std::min(time_based_total, max_iterations);
+                    remaining_iters = std::max(remaining_iters, 100);
+                    T_from = sa_start_temp;
+                } else {
+                    remaining_iters = std::max(100,
+                        static_cast<int>(iters_per_sec * remaining_s));
+                    T_from = temperature;
                 }
-                if (logger) {
-                    logger->log_sa_calibrated(iter, sa_step, estimated_total);
+                sa_step = std::pow(sa_end_temp / T_from, 1.0 / remaining_iters);
+                if (!sa_calibrated) {
+                    sa_calibrated = true;
+                    if (verbose) {
+                        std::cout << "  SA calibrated: ~" << iters_per_sec
+                                  << " iter/s, estimated " << remaining_iters
+                                  << " total, step=" << sa_step << "\n";
+                    }
+                    if (logger) {
+                        logger->log_sa_calibrated(iter, sa_step, remaining_iters);
+                    }
                 }
             }
         }
@@ -675,10 +696,14 @@ SolverResult solve_warm(
     init_sol.feasibility_mode = feasibility_mode;
     init_sol.unassigned_penalty = unassigned_penalty;
 
-    // SA parameters — calibrated from initial solution cost
+    // SA parameters — Bongiovanni-aligned, travel-based:
+    //   T_start ≈ 0.0721 * travel  ("5%-worse-than-current accepted at 50%")
+    //   T_end   = 0.001 * T_start  ("converges to zero towards end of search")
     double travel = init_sol.travel_cost();
-    double sa_start_temp = (travel > 1e-6) ? 0.025 * travel : start_temperature;
-    double sa_end_temp = 0.065 * sa_start_temp;
+    double sa_start_temp = (travel > 1e-6)
+        ? -0.05 * travel / std::log(0.5)
+        : start_temperature;
+    double sa_end_temp = 0.001 * sa_start_temp;
 
     double temperature = sa_start_temp;
     double sa_step;
@@ -733,16 +758,32 @@ SolverResult solve_warm(
                            - (exclude_selection_from_budget ? total_selection_time : 0.0);
             if (elapsed >= time_limit) break;
 
-            if (!sa_calibrated && iter == 10 && elapsed > 0.0) {
-                double iters_per_sec = 10.0 / elapsed;
-                int estimated_total = std::min(
-                    static_cast<int>(iters_per_sec * time_limit), max_iterations);
-                estimated_total = std::max(estimated_total, 100);
-                sa_step = std::pow(sa_end_temp / sa_start_temp, 1.0 / estimated_total);
-                temperature = sa_start_temp;
-                sa_calibrated = true;
-                if (logger) {
-                    logger->log_sa_calibrated(iter, sa_step, estimated_total);
+            // Bootstrap at iter==10 (T_start -> T_end), then re-target every
+            // 10 iters (T_current -> T_end over remaining time).
+            bool do_calibrate = false;
+            if (!sa_calibrated && iter == 10 && elapsed > 0.0) do_calibrate = true;
+            else if (sa_calibrated && iter > 10 && iter % 10 == 0 && elapsed > 0.0) do_calibrate = true;
+            if (do_calibrate) {
+                double iters_per_sec = static_cast<double>(iter) / elapsed;
+                double remaining_s = time_limit - elapsed;
+                int remaining_iters;
+                double T_from;
+                if (!sa_calibrated) {
+                    int time_based_total = static_cast<int>(iters_per_sec * time_limit);
+                    remaining_iters = std::min(time_based_total, max_iterations);
+                    remaining_iters = std::max(remaining_iters, 100);
+                    T_from = sa_start_temp;
+                } else {
+                    remaining_iters = std::max(100,
+                        static_cast<int>(iters_per_sec * remaining_s));
+                    T_from = temperature;
+                }
+                sa_step = std::pow(sa_end_temp / T_from, 1.0 / remaining_iters);
+                if (!sa_calibrated) {
+                    sa_calibrated = true;
+                    if (logger) {
+                        logger->log_sa_calibrated(iter, sa_step, remaining_iters);
+                    }
                 }
             }
         }

@@ -15,11 +15,13 @@ static constexpr double EPS = 1e-6;
 DynamicSolver::DynamicSolver(const DARPInstance& instance,
                              const EpochConfig& epoch_config,
                              const SolverParams& solver_params,
-                             bool verbose)
+                             bool verbose,
+                             SchedulingPolicy policy)
     : instance_(instance),
       epoch_config_(epoch_config),
       solver_params_(solver_params),
       verbose_(verbose),
+      policy_(policy),
       current_solution_(instance),
       sim_clock_(0.0),
       new_since_last_epoch_(0) {
@@ -146,13 +148,21 @@ void DynamicSolver::greedy_insert_pending() {
                 // Recompute aux data and min_insert_pos for modified route
                 aux_cache[best_route] = precompute_route_aux(
                     current_solution_.routes[best_route], instance_);
-                // Update min_insert_pos for this route
+                // Update min_insert_pos for this route. Match the policy used
+                // by compute_min_insert_positions so the two stay consistent.
                 if (!current_solution_.min_insert_pos.empty()) {
                     const auto& route = current_solution_.routes[best_route];
-                    auto sched = current_solution_.compute_route_schedule(route);
                     int last_visited = 0;
-                    for (int j = 0; j < static_cast<int>(route.size()); j++) {
-                        if (sched.begin_service[j] <= sim_clock_ + EPS) last_visited = j;
+                    if (policy_ == SchedulingPolicy::Lazy) {
+                        auto latest = current_solution_.compute_latest_begin_times(route);
+                        for (int j = 0; j < static_cast<int>(route.size()); j++) {
+                            if (latest[j] <= sim_clock_ + EPS) last_visited = j;
+                        }
+                    } else {
+                        auto sched = current_solution_.compute_route_schedule(route);
+                        for (int j = 0; j < static_cast<int>(route.size()); j++) {
+                            if (sched.begin_service[j] <= sim_clock_ + EPS) last_visited = j;
+                        }
                     }
                     current_solution_.min_insert_pos[best_route] = last_visited + 1;
                 }
@@ -232,14 +242,25 @@ void DynamicSolver::commit_picked_up_requests() {
     for (const auto& route : current_solution_.routes) {
         if (static_cast<int>(route.size()) <= instance_.empty_route_size()) continue;
 
-        auto sched = current_solution_.compute_route_schedule(route);
-
-        for (int j = 0; j < static_cast<int>(route.size()); j++) {
-            int nid = route[j];
-            // Only commit via pickup nodes
-            if (nid >= 1 && nid <= n && !committed_.count(nid)) {
-                if (sched.begin_service[j] <= sim_clock_ + EPS) {
-                    committed_.insert(nid);
+        if (policy_ == SchedulingPolicy::Lazy) {
+            auto latest = current_solution_.compute_latest_begin_times(route);
+            for (int j = 0; j < static_cast<int>(route.size()); j++) {
+                int nid = route[j];
+                if (nid >= 1 && nid <= n && !committed_.count(nid)) {
+                    if (latest[j] <= sim_clock_ + EPS) {
+                        committed_.insert(nid);
+                    }
+                }
+            }
+        } else {
+            auto sched = current_solution_.compute_route_schedule(route);
+            for (int j = 0; j < static_cast<int>(route.size()); j++) {
+                int nid = route[j];
+                // Only commit via pickup nodes
+                if (nid >= 1 && nid <= n && !committed_.count(nid)) {
+                    if (sched.begin_service[j] <= sim_clock_ + EPS) {
+                        committed_.insert(nid);
+                    }
                 }
             }
         }
@@ -292,17 +313,27 @@ void DynamicSolver::compute_min_insert_positions() {
             continue;
         }
 
+        // Under lazy: a stop is treated as "visited" only when its latest
+        // feasible begin time has passed sim_clock_. Under legacy: visited
+        // when the eager-schedule begin_service has passed sim_clock_.
+        // route_ready_time MUST match the schedule used here, because
+        // build_candidate_routes uses it as the departure time for a hard
+        // legality check on candidate routes.
         auto sched = current_solution_.compute_route_schedule(route);
+        std::vector<double> latest;
+        if (policy_ == SchedulingPolicy::Lazy) {
+            latest = current_solution_.compute_latest_begin_times(route);
+        }
 
-        // Find last visited stop, but exclude the destination depot —
-        // a vehicle that has served all its requests and returned to depot
-        // is still available for new insertions before the depot.
         int last_visited = 0;
         int dest_depot = 2 * instance_.num_requests + 1;
         for (int j = 0; j < rlen; j++) {
             if (route[j] == dest_depot) continue;  // don't count dest depot as visited
             if (route[j] == 0) continue;            // don't count origin depot
-            if (sched.begin_service[j] <= sim_clock_ + EPS) {
+            double key = (policy_ == SchedulingPolicy::Lazy)
+                       ? latest[j]
+                       : sched.begin_service[j];
+            if (key <= sim_clock_ + EPS) {
                 last_visited = j;
             }
         }
@@ -310,11 +341,17 @@ void DynamicSolver::compute_min_insert_positions() {
         int min_pos = std::max(instance_.route_start_offset(), last_visited + 1);
         current_solution_.min_insert_pos[k] = min_pos;
 
-        // Cache the actual departure time and node at the position
-        // immediately before the insertion point.
+        // Cache the departure time at prev_idx, in the same schedule the
+        // legality check is gating on.
         int prev_idx = min_pos - 1;
         current_solution_.route_ready_node[k] = route[prev_idx];
-        current_solution_.route_ready_time[k] = sched.departure_time[prev_idx];
+        if (policy_ == SchedulingPolicy::Lazy) {
+            current_solution_.route_ready_time[k] =
+                latest[prev_idx]
+                + instance_.nodes[route[prev_idx]].service_duration;
+        } else {
+            current_solution_.route_ready_time[k] = sched.departure_time[prev_idx];
+        }
     }
 }
 

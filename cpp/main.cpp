@@ -47,7 +47,14 @@ static void print_usage(const char* prog) {
               << "  --exclude-selection-from-budget  Subtract operator-selection wall time\n"
               << "                                   (e.g. ML inference) from the epoch budget,\n"
               << "                                   so ALNS gets the same compute regardless of\n"
-              << "                                   which selection strategy is used.\n";
+              << "                                   which selection strategy is used.\n"
+              << "  --scheduling-policy POLICY  Commit / min-insert policy in dynamic mode.\n"
+              << "                              legacy (default): commit when eager schedule\n"
+              << "                                begin_service has passed sim_clock.\n"
+              << "                              lazy: commit only when latest feasible begin\n"
+              << "                                time has passed sim_clock (per Cordeau &\n"
+              << "                                Laporte 2003 / Bongiovanni 2022).\n"
+              << "                              No effect in static mode.\n";
 }
 
 // Write route schedules to file (shared by static and dynamic paths)
@@ -108,6 +115,7 @@ int main(int argc, char* argv[]) {
     int top_n_routes = 0;     // 0 = no limit
     bool dynamic_stats = false;
     bool exclude_selection_from_budget = false;
+    SchedulingPolicy scheduling_policy = SchedulingPolicy::Legacy;
 
     // Logging options
     bool log_state = false;
@@ -169,6 +177,17 @@ int main(int argc, char* argv[]) {
             dynamic_stats = true;
         } else if (arg == "--exclude-selection-from-budget") {
             exclude_selection_from_budget = true;
+        } else if (arg == "--scheduling-policy" && i + 1 < argc) {
+            std::string val = argv[++i];
+            if (val == "legacy") {
+                scheduling_policy = SchedulingPolicy::Legacy;
+            } else if (val == "lazy") {
+                scheduling_policy = SchedulingPolicy::Lazy;
+            } else {
+                std::cerr << "Unknown --scheduling-policy: " << val
+                          << " (valid: legacy, lazy)\n";
+                return 1;
+            }
         } else if (arg == "--log-state") {
             log_state = true;
         } else if (arg == "--log-trials") {
@@ -297,7 +316,7 @@ int main(int argc, char* argv[]) {
         sp.log_ml_probs_path = log_ml_probs_path;
         sp.ml_softmax_temp = ml_softmax_temp;
 
-        DynamicSolver dynamic_solver(inst, ec, sp, true);
+        DynamicSolver dynamic_solver(inst, ec, sp, true, scheduling_policy);
         DynamicResult result = dynamic_solver.run();
 
         // Write route schedules if requested

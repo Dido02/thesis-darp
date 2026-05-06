@@ -37,6 +37,16 @@ public:
     // Scheduling
     RouteSchedule compute_route_schedule(const std::vector<int>& route) const;
 
+    // ALAP backward-sweep schedule used by the lazy commit policy in dynamic
+    // mode. Returns latest_begin[j] = the latest sim time at which the vehicle
+    // can START service at route[j] without violating any downstream node's
+    // latest time-window. compute_route_schedule is unchanged; this is a
+    // separate, lighter computation used only by commit/min-insert decisions.
+    // For routes that are infeasible under any schedule, individual entries
+    // may be < node.earliest (callers treat that as "must commit now").
+    std::vector<double>
+    compute_latest_begin_times(const std::vector<int>& route) const;
+
     // Feasibility (delegates to slack_corrected by default)
     std::pair<bool, std::string> check_route_feasibility(
         const std::vector<int>& route) const;
