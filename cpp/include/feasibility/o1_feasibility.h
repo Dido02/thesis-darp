@@ -1,6 +1,7 @@
 #pragma once
 
 #include "instance.h"
+#include <string>
 #include <vector>
 
 // Auxiliary data for O(1) insertion feasibility checks (Gschwind & Drexl 2019)

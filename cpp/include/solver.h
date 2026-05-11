@@ -46,6 +46,11 @@ SolverResult solve(
 // Warm-start ALNS: skip initial solution construction, use provided solution.
 // sim_clock and epoch_length are passed through to ALNSState so rolling_horizon
 // ML features can read them. Both default to 0.0 (irrelevant for static runs).
+//
+// log_iters: when true, print a `[Epoch <epoch_tag>] iter K @ <ms>ms: ...`
+// checkpoint line every 100 iterations. Used by --log-epoch-iters in dynamic
+// mode to record within-epoch trajectories. epoch_tag is included verbatim in
+// the line; -1 disables (used by static-mode callers that don't have a tag).
 SolverResult solve_warm(
     const DARPInstance& instance,
     const DARPSolution& initial_solution,
@@ -66,4 +71,6 @@ SolverResult solve_warm(
     double epoch_length = 0.0,
     bool exclude_selection_from_budget = false,
     const std::string& log_ml_probs_path = "",
-    std::optional<float> ml_softmax_temp = std::nullopt);
+    std::optional<float> ml_softmax_temp = std::nullopt,
+    bool log_iters = false,
+    int epoch_tag = -1);

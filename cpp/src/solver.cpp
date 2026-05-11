@@ -682,7 +682,9 @@ SolverResult solve_warm(
     double epoch_length,
     bool exclude_selection_from_budget,
     const std::string& log_ml_probs_path,
-    std::optional<float> ml_softmax_temp) {
+    std::optional<float> ml_softmax_temp,
+    bool log_iters,
+    int epoch_tag) {
 
     using Clock = std::chrono::high_resolution_clock;
 
@@ -894,6 +896,18 @@ SolverResult solve_warm(
                 logger->run_and_log_trials(iter, trial_state, current_obj_before_accept,
                                            temp_before, registry, trial_seed);
             }
+            auto t_log1 = Clock::now();
+            total_logging_time += std::chrono::duration<double>(t_log1 - t_log0).count();
+        }
+
+        if (log_iters && (iter + 1) % 100 == 0) {
+            auto t_log0 = Clock::now();
+            long ms_elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
+                t_log0 - solve_t0).count();
+            std::cout << "[Epoch " << epoch_tag << "] iter " << (iter + 1)
+                      << " @ " << ms_elapsed << "ms: current=" << current_obj
+                      << ", best=" << best_obj
+                      << ", temp=" << temperature << "\n";
             auto t_log1 = Clock::now();
             total_logging_time += std::chrono::duration<double>(t_log1 - t_log0).count();
         }

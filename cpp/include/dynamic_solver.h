@@ -77,6 +77,10 @@ struct SolverParams {
     double unassigned_penalty = 1000.0;
     int top_n_routes = 0;  // limit repair to N nearest routes (0 = no limit)
     bool dynamic_stats = false;  // print per-epoch performance stats
+    bool log_iters = false;      // emit `[Epoch N] iter K @ <ms>ms: ...`
+                                 // checkpoint lines from inside each epoch's
+                                 // ALNS call. Off by default; opt-in via
+                                 // --log-epoch-iters in main.cpp.
     bool exclude_selection_from_budget = false;  // subtract operator-selection
                                                   // wall time (e.g. ML ONNX
                                                   // inference) from epoch budget

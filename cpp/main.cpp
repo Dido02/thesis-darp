@@ -44,6 +44,9 @@ static void print_usage(const char* prog) {
               << "  --epoch-budget-ms MS ALNS wall-clock budget per epoch in ms (default: 5000)\n"
               << "  --top-n-routes N   Limit repair to N nearest routes per request (default: 0 = all)\n"
               << "  --dynamic-stats    Print per-epoch performance stats\n"
+              << "  --log-epoch-iters  Emit `[Epoch N] iter K @ <ms>ms: current=...`\n"
+              << "                     checkpoint lines (every 100 iters) from inside\n"
+              << "                     each dynamic-mode epoch's ALNS call. Off by default.\n"
               << "  --exclude-selection-from-budget  Subtract operator-selection wall time\n"
               << "                                   (e.g. ML inference) from the epoch budget,\n"
               << "                                   so ALNS gets the same compute regardless of\n"
@@ -114,6 +117,7 @@ int main(int argc, char* argv[]) {
     double epoch_budget_ms = 5000.0;
     int top_n_routes = 0;     // 0 = no limit
     bool dynamic_stats = false;
+    bool log_epoch_iters = false;
     bool exclude_selection_from_budget = false;
     SchedulingPolicy scheduling_policy = SchedulingPolicy::Legacy;
 
@@ -175,6 +179,8 @@ int main(int argc, char* argv[]) {
             top_n_routes = std::stoi(argv[++i]);
         } else if (arg == "--dynamic-stats") {
             dynamic_stats = true;
+        } else if (arg == "--log-epoch-iters") {
+            log_epoch_iters = true;
         } else if (arg == "--exclude-selection-from-budget") {
             exclude_selection_from_budget = true;
         } else if (arg == "--scheduling-policy" && i + 1 < argc) {
@@ -310,6 +316,7 @@ int main(int argc, char* argv[]) {
         sp.unassigned_penalty = penalty;
         sp.top_n_routes = top_n_routes;
         sp.dynamic_stats = dynamic_stats;
+        sp.log_iters = log_epoch_iters;
         sp.exclude_selection_from_budget = exclude_selection_from_budget;
         sp.logger = logger;
         sp.ml_model_dir = ml_model_dir;
