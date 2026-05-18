@@ -398,6 +398,13 @@ EpochLog DynamicSolver::run_epoch_alns(int epoch_id) {
 
     // Run ALNS with time budget
     double time_budget = epoch_config_.epoch_budget_ms / 1000.0;
+    // Persistence: when the flag is on, give solve_warm pointers to the cached
+    // weight vectors. They start empty (first-epoch signal → use 1.0 defaults)
+    // and accumulate from epoch to epoch. nullptr keeps current behavior.
+    std::vector<double>* persist_d = solver_params_.persist_roulette_weights
+                                     ? &persist_destroy_w_ : nullptr;
+    std::vector<double>* persist_r = solver_params_.persist_roulette_weights
+                                     ? &persist_repair_w_ : nullptr;
     SolverResult result = solve_warm(
         instance_, epoch_sol,
         solver_params_.max_iterations,
@@ -419,7 +426,9 @@ EpochLog DynamicSolver::run_epoch_alns(int epoch_id) {
         solver_params_.log_ml_probs_path,
         solver_params_.ml_softmax_temp,
         solver_params_.log_iters,
-        epoch_id);
+        epoch_id,
+        persist_d,
+        persist_r);
 
     // Update current solution from ALNS result
     current_solution_ = std::move(result.best);

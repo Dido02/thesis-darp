@@ -65,6 +65,11 @@ public:
 
     const std::vector<double>& get_destroy_weights() const { return destroy_weights_; }
     const std::vector<double>& get_repair_weights() const { return repair_weights_; }
+    // Roulette weight setters used by --persist-roulette-weights in dynamic mode
+    // to carry adaptive weights across epochs. No-op if the input size doesn't
+    // match the registered operator count (first-epoch case).
+    void set_destroy_weights(const std::vector<double>& w);
+    void set_repair_weights(const std::vector<double>& w);
     const DestroyOp& get_destroy(int idx) const { return destroy_ops_[idx].second; }
     const RepairOp& get_repair(int idx) const { return repair_ops_[idx].second; }
 

@@ -87,6 +87,11 @@ struct SolverParams {
                                                   // so ALNS gets the same
                                                   // compute regardless of
                                                   // selection strategy.
+    bool persist_roulette_weights = false;  // carry roulette wheel weights
+                                            // across epochs so adaptive
+                                            // learning accumulates across the
+                                            // whole rolling-horizon run.
+                                            // No-op for random / ml selectors.
     ALNSLogger* logger = nullptr;  // non-owning, nullable
     std::string ml_model_dir;  // empty = no ML; required when selection_config == "ml"
     std::string log_ml_probs_path;  // empty = no logging; if set, MLSelector writes
@@ -123,6 +128,10 @@ private:
     double sim_clock_;
     int new_since_last_epoch_;       // for REQUEST_COUNT trigger
     double greedy_preinsert_ms_ = 0.0;  // accumulated greedy pre-insertion time per epoch
+    // Roulette weight carryover for --persist-roulette-weights. Empty until
+    // the first epoch fills them; subsequent epochs feed them back in.
+    std::vector<double> persist_destroy_w_;
+    std::vector<double> persist_repair_w_;
 
     void release_requests(double up_to_time);
     void greedy_insert_pending();

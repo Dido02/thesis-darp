@@ -165,6 +165,20 @@ void OperatorRegistry::update_weights(int destroy_idx, int repair_idx, double sc
     }
 }
 
+// Roulette weight setters — used by --persist-roulette-weights to carry
+// adaptive weights across dynamic-mode epochs. No-op when the input size
+// doesn't match the registered op count (the first-epoch path, where the
+// caller passes an empty vector signalling "use the constructor's baseline").
+void OperatorRegistry::set_destroy_weights(const std::vector<double>& w) {
+    if (w.size() != destroy_weights_.size()) return;
+    destroy_weights_ = w;
+}
+
+void OperatorRegistry::set_repair_weights(const std::vector<double>& w) {
+    if (w.size() != repair_weights_.size()) return;
+    repair_weights_ = w;
+}
+
 int OperatorRegistry::roulette_select(const std::vector<double>& weights, std::mt19937& rng) {
     double total = std::accumulate(weights.begin(), weights.end(), 0.0);
     std::uniform_real_distribution<double> dist(0.0, total);

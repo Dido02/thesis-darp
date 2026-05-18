@@ -684,7 +684,9 @@ SolverResult solve_warm(
     const std::string& log_ml_probs_path,
     std::optional<float> ml_softmax_temp,
     bool log_iters,
-    int epoch_tag) {
+    int epoch_tag,
+    std::vector<double>* persist_destroy_weights,
+    std::vector<double>* persist_repair_weights) {
 
     using Clock = std::chrono::high_resolution_clock;
 
@@ -693,6 +695,16 @@ SolverResult solve_warm(
     OperatorRegistry registry = build_registry(destroy_config, repair_config, selection_config);
     attach_ml_selector_if_needed(registry, selection_config, ml_model_dir, verbose,
                                  log_ml_probs_path, ml_softmax_temp);
+
+    // Roulette weight persistence (opt-in via --persist-roulette-weights).
+    // The setters no-op on size mismatch, so the first epoch (empty input)
+    // falls through to the registry's 1.0 baseline.
+    if (persist_destroy_weights && !persist_destroy_weights->empty()) {
+        registry.set_destroy_weights(*persist_destroy_weights);
+    }
+    if (persist_repair_weights && !persist_repair_weights->empty()) {
+        registry.set_repair_weights(*persist_repair_weights);
+    }
 
     DARPSolution init_sol = initial_solution.copy();
     init_sol.feasibility_mode = feasibility_mode;
@@ -935,5 +947,15 @@ SolverResult solve_warm(
     result.total_repair_time = w_total_repair_time;
     result.total_other_time = solve_time - w_total_destroy_time - w_total_repair_time;
     result.total_selection_time = total_selection_time;
+
+    // Roulette weight persistence (opt-in): write back the final weights so the
+    // next epoch can resume from them. No-op when pointers are null.
+    if (persist_destroy_weights) {
+        *persist_destroy_weights = registry.get_destroy_weights();
+    }
+    if (persist_repair_weights) {
+        *persist_repair_weights = registry.get_repair_weights();
+    }
+
     return result;
 }

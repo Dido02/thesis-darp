@@ -51,6 +51,16 @@ SolverResult solve(
 // checkpoint line every 100 iterations. Used by --log-epoch-iters in dynamic
 // mode to record within-epoch trajectories. epoch_tag is included verbatim in
 // the line; -1 disables (used by static-mode callers that don't have a tag).
+//
+// persist_destroy_weights / persist_repair_weights: optional in/out vectors
+// for roulette-weight persistence across dynamic-mode epochs. When non-null:
+//   - Pre-loop: if non-empty and size matches the registry, applied as the
+//     starting weights (replacing the 1.0 defaults). Empty input is the
+//     first-epoch signal and is ignored.
+//   - Post-loop: overwritten with the final weights so the caller can pass
+//     them back in on the next epoch.
+// nullptr (default) preserves current behavior exactly — every existing bench
+// remains reproducible.
 SolverResult solve_warm(
     const DARPInstance& instance,
     const DARPSolution& initial_solution,
@@ -73,4 +83,6 @@ SolverResult solve_warm(
     const std::string& log_ml_probs_path = "",
     std::optional<float> ml_softmax_temp = std::nullopt,
     bool log_iters = false,
-    int epoch_tag = -1);
+    int epoch_tag = -1,
+    std::vector<double>* persist_destroy_weights = nullptr,
+    std::vector<double>* persist_repair_weights = nullptr);

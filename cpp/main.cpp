@@ -51,6 +51,9 @@ static void print_usage(const char* prog) {
               << "                                   (e.g. ML inference) from the epoch budget,\n"
               << "                                   so ALNS gets the same compute regardless of\n"
               << "                                   which selection strategy is used.\n"
+              << "  --persist-roulette-weights  Carry roulette wheel weights across dynamic-mode\n"
+              << "                              epochs (default: reset to 1.0 each epoch). No-op\n"
+              << "                              for --selection random / ml.\n"
               << "  --scheduling-policy POLICY  Commit / min-insert policy in dynamic mode.\n"
               << "                              legacy (default): commit when eager schedule\n"
               << "                                begin_service has passed sim_clock.\n"
@@ -119,6 +122,7 @@ int main(int argc, char* argv[]) {
     bool dynamic_stats = false;
     bool log_epoch_iters = false;
     bool exclude_selection_from_budget = false;
+    bool persist_roulette_weights = false;
     SchedulingPolicy scheduling_policy = SchedulingPolicy::Legacy;
 
     // Logging options
@@ -183,6 +187,8 @@ int main(int argc, char* argv[]) {
             log_epoch_iters = true;
         } else if (arg == "--exclude-selection-from-budget") {
             exclude_selection_from_budget = true;
+        } else if (arg == "--persist-roulette-weights") {
+            persist_roulette_weights = true;
         } else if (arg == "--scheduling-policy" && i + 1 < argc) {
             std::string val = argv[++i];
             if (val == "legacy") {
@@ -318,6 +324,7 @@ int main(int argc, char* argv[]) {
         sp.dynamic_stats = dynamic_stats;
         sp.log_iters = log_epoch_iters;
         sp.exclude_selection_from_budget = exclude_selection_from_budget;
+        sp.persist_roulette_weights = persist_roulette_weights;
         sp.logger = logger;
         sp.ml_model_dir = ml_model_dir;
         sp.log_ml_probs_path = log_ml_probs_path;
