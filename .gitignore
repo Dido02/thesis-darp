@@ -34,3 +34,7 @@ benchmarks/__pycache__/
 *.parquet
 *.csv
 *.log
+# Private working notes (kept locally)
+CLAUDE.md
+CONTEXT.md
+THESIS_NOTES.md
