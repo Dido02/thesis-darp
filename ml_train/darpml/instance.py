@@ -63,7 +63,7 @@ class DARPInstance:
 # Module-level cache: resolved path -> DARPInstance
 _INSTANCE_CACHE: dict[str, DARPInstance] = {}
 
-MAX_NODES_FOR_FULL_LOAD = 10_000
+MAX_NODES_FOR_FULL_LOAD = 12_000
 
 
 def load_instance(path: str | Path) -> DARPInstance:

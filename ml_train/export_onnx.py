@@ -81,6 +81,7 @@ def main():
     label_columns = meta["label_columns"]
     mode = meta.get("mode")
     batches = meta.get("batches", [])
+    model_kind = meta.get("model_kind", "classifier")  # legacy meta.json files have no model_kind
 
     # Pull each feature's batch + mode + tolerance straight from the registry —
     # single source of truth, can't drift from training because both reference
@@ -132,9 +133,12 @@ def main():
 
         # Flat output (no ZipMap dict) so C++ gets a tensor.
         # target_opset pinned to 21 to match onnxruntime 1.19.2 support.
+        # zipmap is a classifier-only option; regressors emit a flat tensor
+        # by default and reject the option.
+        convert_options = {id(clf): {"zipmap": False}} if model_kind == "classifier" else None
         onnx_model = convert_sklearn(
             clf, initial_types=initial_type,
-            options={id(clf): {"zipmap": False}},
+            options=convert_options,
             target_opset=21,
         )
         onnx_path = out_dir / f"{d_name}_{r_name}.onnx"

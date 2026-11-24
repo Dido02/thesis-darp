@@ -5,11 +5,13 @@ import json
 import warnings
 from dataclasses import dataclass, field, asdict
 from pathlib import Path
+from typing import Optional, Union
 
 import joblib
 import numpy as np
 import pandas as pd
-from sklearn.ensemble import RandomForestClassifier
+from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor
+from sklearn.tree import DecisionTreeClassifier, DecisionTreeRegressor
 from sklearn.metrics import (
     accuracy_score, precision_score, recall_score, f1_score, confusion_matrix,
 )
@@ -33,8 +35,23 @@ class ClassifierMetrics:
 
 
 @dataclass
+class RegressorMetrics:
+    pair_name: str
+    mae: float
+    r2: float
+    baseline_mae: float
+    mae_lift: float           # baseline_mae - mae; positive = beats mean predictor
+    n_train: int
+    n_test: int
+    label_mean_train: float
+    label_std_train: float
+    label_mean_test: float
+    label_std_test: float
+
+
+@dataclass
 class TrainingReport:
-    pair_metrics: list[ClassifierMetrics]
+    pair_metrics: list                 # list[ClassifierMetrics] or list[RegressorMetrics]
     feature_importances: dict[str, float]
     feature_names: list[str]
     n_samples: int
@@ -46,11 +63,12 @@ class TrainingReport:
     n_test_rows: int
     train_log_files: list[str]
     test_log_files: list[str]
-    median_f1_lift: float
+    median_f1_lift: float              # 0.0 for regressor
     n_positive_lift: int
     n_zero_lift: int
     n_negative_lift: int
     n_degenerate_pairs: int
+    model_kind: str = "classifier"
 
 
 def train_single_classifier(
@@ -61,8 +79,15 @@ def train_single_classifier(
     pair_name: str,
     n_estimators: int = 100,
     random_state: int = 42,
-) -> tuple[RandomForestClassifier, ClassifierMetrics]:
-    """Train and evaluate one RF classifier for a single operator pair."""
+    model_type: str = "forest",
+    tree_max_depth: Optional[int] = None,
+) -> tuple[Union[RandomForestClassifier, DecisionTreeClassifier], ClassifierMetrics]:
+    """Train and evaluate one classifier for a single operator pair.
+
+    model_type='forest' (default): RandomForestClassifier with n_estimators trees.
+    model_type='tree': single DecisionTreeClassifier (no ensembling). For tree
+        mode, tree_max_depth optionally caps depth (None = unrestricted).
+    """
     # Check for degenerate labels
     unique_train = np.unique(y_train)
     if len(unique_train) < 2:
@@ -71,12 +96,22 @@ def train_single_classifier(
             f"Classifier will be degenerate."
         )
 
-    clf = RandomForestClassifier(
-        n_estimators=n_estimators,
-        class_weight="balanced",
-        random_state=random_state,
-        n_jobs=-1,
-    )
+    if model_type == "tree":
+        clf = DecisionTreeClassifier(
+            class_weight="balanced",
+            random_state=random_state,
+            max_depth=tree_max_depth,
+        )
+    elif model_type == "forest":
+        clf = RandomForestClassifier(
+            n_estimators=n_estimators,
+            class_weight="balanced",
+            random_state=random_state,
+            n_jobs=-1,
+            max_depth=tree_max_depth,
+        )
+    else:
+        raise ValueError(f"model_type must be 'forest' or 'tree', got {model_type!r}")
     clf.fit(X_train, y_train)
     y_pred = clf.predict(X_test)
 
@@ -114,6 +149,78 @@ def train_single_classifier(
     return clf, metrics
 
 
+def train_single_regressor(
+    X_train: np.ndarray,
+    y_train: np.ndarray,
+    X_test: np.ndarray,
+    y_test: np.ndarray,
+    pair_name: str,
+    n_estimators: int = 100,
+    random_state: int = 42,
+    model_type: str = "forest",
+    tree_max_depth: Optional[int] = None,
+) -> tuple[Union[RandomForestRegressor, DecisionTreeRegressor], RegressorMetrics]:
+    """Train and evaluate one regressor for a single operator pair.
+
+    model_type='forest' (default): RandomForestRegressor with n_estimators trees.
+    model_type='tree': single DecisionTreeRegressor. tree_max_depth optionally
+        caps depth (None = unrestricted).
+
+    Target: continuous improve_freq value in [0, 1] (the M-trial improvement
+    rate). Reports MAE, R², and MAE-lift over a constant mean predictor.
+    """
+    label_std_train = float(np.std(y_train))
+    if label_std_train < 1e-6:
+        warnings.warn(
+            f"Pair {pair_name}: degenerate continuous label "
+            f"(std={label_std_train:.3e}). Regressor will be near-constant."
+        )
+
+    if model_type == "tree":
+        reg = DecisionTreeRegressor(
+            random_state=random_state,
+            max_depth=tree_max_depth,
+        )
+    elif model_type == "forest":
+        reg = RandomForestRegressor(
+            n_estimators=n_estimators,
+            random_state=random_state,
+            n_jobs=-1,
+            max_depth=tree_max_depth,
+        )
+    else:
+        raise ValueError(f"model_type must be 'forest' or 'tree', got {model_type!r}")
+    reg.fit(X_train, y_train)
+    y_pred = reg.predict(X_test)
+
+    mae = float(np.mean(np.abs(y_test - y_pred)))
+
+    # R² (manual, handles constant test label)
+    ss_res = float(np.sum((y_test - y_pred) ** 2))
+    ss_tot = float(np.sum((y_test - y_test.mean()) ** 2))
+    r2 = 1.0 - (ss_res / ss_tot) if ss_tot > 0 else 0.0
+
+    # Baseline: predict the train-set mean for every test point
+    y_baseline = np.full_like(y_test, fill_value=float(y_train.mean()), dtype=np.float64)
+    baseline_mae = float(np.mean(np.abs(y_test - y_baseline)))
+    mae_lift = baseline_mae - mae  # positive = regressor beats mean predictor
+
+    metrics = RegressorMetrics(
+        pair_name=pair_name,
+        mae=mae,
+        r2=r2,
+        baseline_mae=baseline_mae,
+        mae_lift=mae_lift,
+        n_train=len(y_train),
+        n_test=len(y_test),
+        label_mean_train=float(y_train.mean()),
+        label_std_train=label_std_train,
+        label_mean_test=float(y_test.mean()),
+        label_std_test=float(np.std(y_test)),
+    )
+    return reg, metrics
+
+
 def train_pipeline(
     features_path: str | Path,
     labels_path: str | Path,
@@ -124,6 +231,11 @@ def train_pipeline(
     feature_names: list[str] | None = None,
     mode: str | None = None,
     batches: list[str] | None = None,
+    model_kind: str = "classifier",
+    target_metric: str = "improve_freq",
+    log_transform_label: bool = False,
+    model_type: str = "forest",
+    tree_max_depth: Optional[int] = None,
 ) -> TrainingReport:
     """Full training pipeline: load data, train 20 classifiers, save models.
 
@@ -154,7 +266,33 @@ def train_pipeline(
             raise ValueError(
                 f"train_pipeline: feature_names contains columns not in parquet: {missing}"
             )
-    label_cols = [c for c in labels_df.columns if c.startswith("pair_")]
+    if model_kind not in ("classifier", "regressor"):
+        raise ValueError(f"model_kind must be 'classifier' or 'regressor', got {model_kind!r}")
+    if model_type not in ("forest", "tree"):
+        raise ValueError(f"model_type must be 'forest' or 'tree', got {model_type!r}")
+
+    # Map target_metric to its label-column prefix. Only used for regressor;
+    # classifier ignores this and reads the binary `pair_{d}_{r}` columns.
+    target_prefix_map = {
+        "improve_freq": "improve_freq_",  # frequency-only (legacy default)
+        "ei_pct":       "ei_pct_",        # expected improvement % (magnitude-aware)
+    }
+    if target_metric not in target_prefix_map:
+        raise ValueError(
+            f"target_metric must be one of {list(target_prefix_map)}, got {target_metric!r}"
+        )
+
+    label_cols = sorted(c for c in labels_df.columns if c.startswith("pair_"))
+    if model_kind == "regressor":
+        # Verify the continuous columns we'll actually train on are present.
+        prefix = target_prefix_map[target_metric]
+        missing = [c.replace("pair_", prefix) for c in label_cols
+                   if c.replace("pair_", prefix) not in labels_df.columns]
+        if missing:
+            raise ValueError(
+                f"model_kind='regressor' with target_metric={target_metric!r} "
+                f"requires {prefix}* columns; missing: {missing}"
+            )
 
     X = df[feature_names].values
     n_samples, n_features = X.shape
@@ -179,29 +317,105 @@ def train_pipeline(
 
     X_train, X_test = X[train_idx], X[test_idx]
 
-    # Train one classifier per pair
-    all_metrics: list[ClassifierMetrics] = []
+    # Train one model per pair (classifier or regressor depending on model_kind)
+    all_metrics: list = []
     all_importances = np.zeros(n_features)
-    models: dict[str, RandomForestClassifier] = {}
+    models: dict = {}
 
-    for col in sorted(label_cols):
-        y = df[col].values
+    target_prefix = target_prefix_map[target_metric]
+
+    # When True, regressor labels are log-transformed and min-max scaled per
+    # pair (fit on TRAIN ONLY) before training. The trained ONNX therefore
+    # emits a scaled-log-EI score; relative ordering across pairs is preserved
+    # so the C++ proportional sampler still works without any code change.
+    # Metrics in the report are computed back in ORIGINAL space (after
+    # inversion) so they're directly comparable to the non-log regressor.
+    log_transform_active = (
+        log_transform_label
+        and model_kind == "regressor"
+        and target_metric == "ei_pct"
+    )
+    label_transforms_per_pair: dict[str, dict[str, float]] = {}
+
+    for col in label_cols:
+        if model_kind == "regressor":
+            target_col = col.replace("pair_", target_prefix)
+        else:
+            target_col = col
+        y = df[target_col].values
         y_train, y_test = y[train_idx], y[test_idx]
 
-        clf, metrics = train_single_classifier(
-            X_train, y_train, X_test, y_test,
-            pair_name=col,
-            n_estimators=n_estimators,
-            random_state=random_state,
-        )
+        if log_transform_active:
+            # log(label + 1e-6), then min-max scale using TRAIN-ONLY stats.
+            log_y_train = np.log(y_train + 1e-6)
+            log_y_test = np.log(y_test + 1e-6)
+            log_min = float(log_y_train.min())
+            log_max = float(log_y_train.max())
+            span = max(log_max - log_min, 1e-12)
+            y_train_used = (log_y_train - log_min) / span
+            y_test_used = (log_y_test - log_min) / span
+            label_transforms_per_pair[col] = {
+                "log_min": log_min,
+                "log_max": log_max,
+            }
+        else:
+            y_train_used = y_train
+            y_test_used = y_test
+
+        if model_kind == "regressor":
+            clf, metrics = train_single_regressor(
+                X_train, y_train_used, X_test, y_test_used,
+                pair_name=col,
+                n_estimators=n_estimators,
+                random_state=random_state,
+                model_type=model_type,
+                tree_max_depth=tree_max_depth,
+            )
+            if log_transform_active:
+                # Re-compute MAE / R² / mae_lift / label-mean in ORIGINAL space.
+                y_pred_t = clf.predict(X_test)
+                # Inverse: y_orig = exp(y_t * span + log_min) - 1e-6, clipped to non-negative
+                y_pred_orig = np.exp(y_pred_t * span + log_min) - 1e-6
+                y_pred_orig = np.clip(y_pred_orig, 0.0, None)
+                mae_orig = float(np.mean(np.abs(y_test - y_pred_orig)))
+                ss_res = float(np.sum((y_test - y_pred_orig) ** 2))
+                ss_tot = float(np.sum((y_test - y_test.mean()) ** 2))
+                r2_orig = 1.0 - (ss_res / ss_tot) if ss_tot > 0 else 0.0
+                y_baseline = np.full_like(
+                    y_test, fill_value=float(y_train.mean()), dtype=np.float64
+                )
+                baseline_mae_orig = float(np.mean(np.abs(y_test - y_baseline)))
+                metrics.mae = mae_orig
+                metrics.r2 = r2_orig
+                metrics.baseline_mae = baseline_mae_orig
+                metrics.mae_lift = baseline_mae_orig - mae_orig
+                metrics.label_mean_train = float(y_train.mean())
+                metrics.label_std_train = float(np.std(y_train))
+                metrics.label_mean_test = float(y_test.mean())
+                metrics.label_std_test = float(np.std(y_test))
+        else:
+            clf, metrics = train_single_classifier(
+                X_train, y_train_used, X_test, y_test_used,
+                pair_name=col,
+                n_estimators=n_estimators,
+                random_state=random_state,
+                model_type=model_type,
+                tree_max_depth=tree_max_depth,
+            )
         all_metrics.append(metrics)
         all_importances += clf.feature_importances_
         models[col] = clf
 
-        print(f"  {col}: acc={metrics.accuracy:.3f} prec={metrics.precision:.3f} "
-              f"rec={metrics.recall:.3f} f1={metrics.f1:.3f} "
-              f"a1={metrics.always1_f1:.3f} lift={metrics.f1_lift:+.3f} "
-              f"(+train={metrics.n_positive_train}/{metrics.n_train})")
+        if model_kind == "regressor":
+            print(f"  {col}: mae={metrics.mae:.4f} r2={metrics.r2:+.3f} "
+                  f"baseline_mae={metrics.baseline_mae:.4f} "
+                  f"mae_lift={metrics.mae_lift:+.4f} "
+                  f"(label_std_train={metrics.label_std_train:.3f})")
+        else:
+            print(f"  {col}: acc={metrics.accuracy:.3f} prec={metrics.precision:.3f} "
+                  f"rec={metrics.recall:.3f} f1={metrics.f1:.3f} "
+                  f"a1={metrics.always1_f1:.3f} lift={metrics.f1_lift:+.3f} "
+                  f"(+train={metrics.n_positive_train}/{metrics.n_train})")
 
     # Average feature importances across all classifiers
     all_importances /= len(label_cols)
@@ -209,21 +423,34 @@ def train_pipeline(
         name: float(imp) for name, imp in zip(feature_names, all_importances)
     }
 
-    # Compute lift summary (excluding degenerate pairs)
-    # Degenerate = positive rate < 0.05 or > 0.95 on test set
+    # Compute lift summary (excluding degenerate pairs).
+    # Classifier degenerate = pos rate <0.05 or >0.95 on test set.
+    # Regressor degenerate = train-label std < 1e-3 (constant target).
     non_degen_lifts = []
     n_degenerate = 0
     for m in all_metrics:
-        pos_rate = m.n_positive_test / m.n_test if m.n_test > 0 else 0.0
-        if pos_rate < 0.05 or pos_rate > 0.95:
-            n_degenerate += 1
+        if model_kind == "regressor":
+            if m.label_std_train < 1e-3:
+                n_degenerate += 1
+            else:
+                non_degen_lifts.append(m.mae_lift)
         else:
-            non_degen_lifts.append(m.f1_lift)
+            pos_rate = m.n_positive_test / m.n_test if m.n_test > 0 else 0.0
+            if pos_rate < 0.05 or pos_rate > 0.95:
+                n_degenerate += 1
+            else:
+                non_degen_lifts.append(m.f1_lift)
 
     median_lift = float(np.median(non_degen_lifts)) if non_degen_lifts else 0.0
-    n_positive = sum(1 for l in non_degen_lifts if l > 0.01)
-    n_zero = sum(1 for l in non_degen_lifts if abs(l) <= 0.01)
-    n_negative = sum(1 for l in non_degen_lifts if l < -0.01)
+    if model_kind == "regressor":
+        # Lifts here are MAE-lifts; "positive" means regressor beats baseline.
+        n_positive = sum(1 for l in non_degen_lifts if l > 0.001)
+        n_zero = sum(1 for l in non_degen_lifts if abs(l) <= 0.001)
+        n_negative = sum(1 for l in non_degen_lifts if l < -0.001)
+    else:
+        n_positive = sum(1 for l in non_degen_lifts if l > 0.01)
+        n_zero = sum(1 for l in non_degen_lifts if abs(l) <= 0.01)
+        n_negative = sum(1 for l in non_degen_lifts if l < -0.01)
 
     # Save models
     for col, clf in models.items():
@@ -234,11 +461,26 @@ def train_pipeline(
     _try_onnx_export(models, feature_names, output_dir)
 
     # Save feature names + mode/batches for downstream ONNX export.
+    # label_columns stays in pair_{d}_{r} form regardless of model_kind so
+    # export_onnx.py's index parsing works unchanged; the regressor was
+    # trained on the parallel improve_freq_{d}_{r} columns but the model
+    # files are still keyed by the binary-pair names.
     meta = {
         "feature_names": feature_names,
-        "label_columns": sorted(label_cols),
+        "label_columns": label_cols,
         "mode": mode,
         "batches": batches if batches is not None else [],
+        "model_kind": model_kind,
+        "target_metric": target_metric,  # which label column the regressor was trained on
+        "log_transform_label": log_transform_active,
+        # Per-pair (log_min, log_max) so the C++ side could invert the
+        # scaled-log output to original-space EI if it ever wanted to.
+        "label_transforms_per_pair": label_transforms_per_pair,
+        # Estimator type ("forest" = RandomForest n_estimators trees;
+        # "tree" = single DecisionTree). C++ inference is type-agnostic;
+        # this field is purely for downstream tooling / reproducibility.
+        "model_type": model_type,
+        "tree_max_depth": tree_max_depth,
     }
     with open(output_dir / "meta.json", "w") as f:
         json.dump(meta, f, indent=2)
@@ -262,10 +504,15 @@ def train_pipeline(
         n_zero_lift=n_zero,
         n_negative_lift=n_negative,
         n_degenerate_pairs=n_degenerate,
+        model_kind=model_kind,
     )
 
-    # Save report (machine-readable JSON)
+    # Save report (machine-readable JSON). Use "median_f1_lift" key for
+    # classifier and "median_mae_lift" for regressor so consumers can
+    # disambiguate without reading model_kind separately.
+    lift_metric_name = "median_mae_lift" if model_kind == "regressor" else "median_f1_lift"
     report_dict = {
+        "model_kind": model_kind,
         "n_samples": report.n_samples,
         "n_features": report.n_features,
         "n_pairs": report.n_pairs,
@@ -281,7 +528,7 @@ def train_pipeline(
         "lift_summary": {
             "n_degenerate_excluded": report.n_degenerate_pairs,
             "n_non_degenerate": report.n_pairs - report.n_degenerate_pairs,
-            "median_f1_lift": report.median_f1_lift,
+            lift_metric_name: report.median_f1_lift,
             "n_positive_lift": report.n_positive_lift,
             "n_zero_lift": report.n_zero_lift,
             "n_negative_lift": report.n_negative_lift,

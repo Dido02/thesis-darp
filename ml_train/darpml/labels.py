@@ -80,6 +80,33 @@ def compute_improvement_freq_labels(
     return {k: int(v >= threshold) for k, v in freqs.items()}
 
 
+def compute_expected_improvement_pct(
+    trials: TrialsRecord,
+    obj_before: float,
+) -> dict[tuple[int, int], float]:
+    """Mean of max(0, -delta / obj_before) over the M trials per pair.
+
+    Captures BOTH frequency and magnitude of improvement in one number:
+        ei_pct = improve_freq * E[gain_pct | improved]
+
+    Normalized by obj_before so a 5,000-unit gain on a 70K-obj instance is
+    the same signal as a 43,000-unit gain on a 600K-obj instance (~7%).
+
+    obj_before <= 0 returns all zeros (degenerate trial-window safety).
+    """
+    if obj_before <= 0:
+        return {(p.d_idx, p.r_idx): 0.0 for p in trials.results}
+    out: dict[tuple[int, int], float] = {}
+    for pair in trials.results:
+        if not pair.deltas:
+            out[(pair.d_idx, pair.r_idx)] = 0.0
+            continue
+        # max(0, -d / obj_before): only count improving trials, scaled to %.
+        gains = [max(0.0, -d / obj_before) for d in pair.deltas]
+        out[(pair.d_idx, pair.r_idx)] = sum(gains) / len(gains)
+    return out
+
+
 # ---------------------------------------------------------------------------
 # Uninformative state detection
 # ---------------------------------------------------------------------------
@@ -135,6 +162,11 @@ def compute_labels_for_log(
         # Compute improvement frequencies (always, for diagnostics columns)
         freqs = compute_improvement_freqs(st.trials)
 
+        # Magnitude-aware target: expected improvement as % of obj_before.
+        # Always computed so the parquet always has the column, regardless of
+        # which `rule` is active. Cost is negligible (one pass over deltas).
+        ei_pct = compute_expected_improvement_pct(st.trials, st.trials.obj_before)
+
         # Compute binary labels based on chosen rule
         if rule == "improvement_freq":
             labels = compute_improvement_freq_labels(freqs, threshold)
@@ -158,6 +190,7 @@ def compute_labels_for_log(
                 key = (di, ri)
                 row[f"pair_{di}_{ri}"] = labels.get(key, 0)
                 row[f"improve_freq_{di}_{ri}"] = freqs.get(key, 0.0)
+                row[f"ei_pct_{di}_{ri}"] = ei_pct.get(key, 0.0)
         rows.append(row)
 
     stats = {
